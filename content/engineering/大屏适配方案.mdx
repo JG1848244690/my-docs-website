@@ -1,0 +1,266 @@
+# 大屏可视化适配方案
+
+## 核心思路
+
+基于设计稿 1920x1080，使用 vw/vh 实现响应式布局，使用 flexbox 避免高度累加问题，使用 clamp() 限制字体大小范围。
+
+## 技术栈
+
+- Sass 函数封装 vw/vh
+- Flexbox 布局
+- CSS clamp() 函数
+
+---
+
+## 一、安装依赖
+
+```bash
+npm install -D sass
+```
+
+---
+
+## 二、创建工具函数
+
+创建 `src/styles/utils.scss`：
+
+```scss
+// 设计稿尺寸
+$design-width: 1920;
+$design-height: 1080;
+
+// px 转 vw
+@function vw($px) {
+  @return ($px / $design-width * 100vw);
+}
+
+// px 转 vh
+@function vh($px) {
+  @return ($px / $design-height * 100vh);
+}
+
+// 字体适配（带最小/最大限制）
+@function font($px, $min: null, $max: null) {
+  $vw-value: calc($px / $design-width * 100vw);
+  
+  @if $min and $max {
+    @return clamp(#{$min}px, $vw-value, #{$max}px);
+  } @else if $min {
+    @return max(#{$min}px, $vw-value);
+  } @else if $max {
+    @return min($vw-value, #{$max}px);
+  } @else {
+    @return $vw-value;
+  }
+}
+```
+
+---
+
+## 三、使用方式
+
+### 1. 布局尺寸
+
+**关键原则：**
+- 宽度、水平间距使用 `vw()` 函数
+- 高度使用 `flexbox` 自适应,不要给多个容器设置固定 vh 高度
+- 垂直间距可以使用 `vh()` 函数
+
+```scss
+@use '@/styles/utils.scss' as *;
+
+.container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column; 
+}
+
+.header {
+  width: 100%;
+  height: vh(100);  // 可以用 vh() 函数
+  flex-shrink: 0;   // 固定高度不收缩
+}
+
+.content {
+  flex: 1;          // 自动填充剩余空间
+  width: vw(1880);
+  gap: vw(20);      // 水平间距用 vw
+  min-height: 0;    // 防止 grid 撑开
+}
+
+.box {
+  width: vw(400);
+  padding: vw(20);
+  border-radius: vw(8);
+  gap: vh(20);      // 垂直间距可以用 vh() 函数
+}
+```
+
+### 2. 字体使用 font() 函数
+
+```scss
+.title {
+  font-size: font(48, 32, 64);  // 设计稿 48px，最小 32px，最大 64px
+}
+
+.text {
+  font-size: font(16, 12, 20);  // 设计稿 16px，最小 12px，最大 20px
+}
+```
+
+---
+
+## 四、核心原理
+
+### vw/vh 计算公式
+
+```
+vw = (设计稿px / 设计稿宽度) * 100vw
+vh = (设计稿px / 设计稿高度) * 100vh
+```
+
+例如：
+- `vw(400)` = (400 / 1920) * 100vw = 20.83vw
+- `vh(100)` = (100 / 1080) * 100vh = 9.259vh
+
+
+
+### clamp() 函数
+
+```css
+font-size: clamp(最小值, 理想值, 最大值);
+```
+
+浏览器会自动选择：
+- 如果理想值 < 最小值，使用最小值
+- 如果理想值 > 最大值，使用最大值
+- 否则使用理想值
+
+---
+
+## 五、ECharts 字体适配
+
+### 1. 创建工具函数
+
+创建 `src/utils/responsive.ts`：
+
+```typescript
+const DESIGN_WIDTH = 1920
+const DESIGN_HEIGHT = 1080
+
+export function font(px: number, min?: number, max?: number): number {
+  const vwValue = (px / DESIGN_WIDTH) * window.innerWidth
+  
+  if (min && max) {
+    return Math.max(min, Math.min(vwValue, max))
+  } else if (min) {
+    return Math.max(min, vwValue)
+  } else if (max) {
+    return Math.min(vwValue, max)
+  }
+  
+  return vwValue
+}
+
+export function getEchartsResponsive() {
+  return {
+    titleFontSize: font(24, 18, 32),
+    legendFontSize: font(14, 12, 18),
+    axisFontSize: font(12, 10, 16),
+    tooltipFontSize: font(14, 12, 18),
+    labelFontSize: font(12, 10, 16),
+  }
+}
+```
+
+### 2. 在 ECharts 中使用
+
+```typescript
+import * as echarts from 'echarts'
+import { getEchartsResponsive } from '@/utils/responsive'
+
+const chartRef = useRef<HTMLDivElement>(null)
+const chartInstance = useRef<echarts.ECharts>()
+
+useEffect(() => {
+  if (!chartRef.current) return
+
+  chartInstance.current = echarts.init(chartRef.current)
+  const responsive = getEchartsResponsive()
+
+  const option: echarts.EChartsOption = {
+    title: {
+      text: '示例图表',
+      textStyle: {
+        fontSize: responsive.titleFontSize,
+        color: '#fff'
+      }
+    },
+    legend: {
+      textStyle: {
+        fontSize: responsive.legendFontSize,
+        color: '#fff'
+      }
+    },
+    tooltip: {
+      textStyle: {
+        fontSize: responsive.tooltipFontSize
+      }
+    },
+    xAxis: {
+      axisLabel: {
+        fontSize: responsive.axisFontSize,
+        color: '#fff'
+      }
+    },
+    yAxis: {
+      axisLabel: {
+        fontSize: responsive.axisFontSize,
+        color: '#fff'
+      }
+    },
+    series: [
+      {
+        label: {
+          fontSize: responsive.labelFontSize
+        }
+      }
+    ]
+  }
+
+  chartInstance.current.setOption(option)
+
+  // 监听窗口变化
+  const handleResize = () => {
+    chartInstance.current?.resize()
+    const newResponsive = getEchartsResponsive()
+    chartInstance.current?.setOption({
+      title: { textStyle: { fontSize: newResponsive.titleFontSize } },
+      legend: { textStyle: { fontSize: newResponsive.legendFontSize } },
+      xAxis: { axisLabel: { fontSize: newResponsive.axisFontSize } },
+      yAxis: { axisLabel: { fontSize: newResponsive.axisFontSize } },
+      series: [{ label: { fontSize: newResponsive.labelFontSize } }]
+    })
+  }
+
+  window.addEventListener('resize', handleResize)
+  return () => {
+    window.removeEventListener('resize', handleResize)
+    chartInstance.current?.dispose()
+  }
+}, [])
+
+return <div ref={chartRef} style={{ width: '100%', height: '100%' }} />
+```
+
+### 3. 关键点
+
+1. 使用 JS 计算字体大小，返回实际像素值
+2. 在 resize 事件中重新计算并更新字体
+3. 所有字体相关配置都使用 responsive 对象
+4. 调用 chart.resize() 重绘图表
+
+---
+
+

@@ -1,0 +1,319 @@
+# 预加载与Next.js预加载机制
+
+## 前端预加载三种方式
+
+### 1. 悬浮预加载（Hover Prefetch）
+
+在用户鼠标悬浮到某个元素时，提前加载对应的数据，提升用户体验。
+
+**应用场景：** 表格查看详情、卡片悬浮预览等
+
+**示例：**
+```javascript
+// 表格悬浮预加载详情数据
+const TableRow = ({ id, name }) => {
+  const [prefetchedData, setPrefetchedData] = useState(null);
+
+  const handleMouseEnter = async () => {
+    if (!prefetchedData) {
+      const data = await fetch(`/api/details/${id}`).then(res => res.json());
+      setPrefetchedData(data);
+    }
+  };
+
+  return (
+    <tr onMouseEnter={handleMouseEnter}>
+      <td>{name}</td>
+      <td>
+        <button onClick={() => showDetail(prefetchedData || id)}>
+          查看详情
+        </button>
+      </td>
+    </tr>
+  );
+};
+```
+
+**优点：**
+- 用户点击时数据已准备好，响应速度快
+- 只在用户有意向时才加载，节省资源
+
+**注意事项：**
+- 需要防抖处理，避免频繁触发
+- 考虑缓存策略，避免重复请求
+
+---
+
+### 2. 分页预加载（Pagination Prefetch）
+
+在加载当前页数据的同时，自动预加载下一页数据。
+
+**应用场景：** 列表分页、无限滚动等
+
+**示例：**
+```javascript
+// 分页预加载
+const usePagePrefetch = (currentPage) => {
+  const [data, setData] = useState({});
+
+  useEffect(() => {
+    // 加载当前页
+    fetchPage(currentPage).then(res => {
+      setData(prev => ({ ...prev, [currentPage]: res }));
+    });
+
+    // 预加载下一页
+    const nextPage = currentPage + 1;
+    if (!data[nextPage]) {
+      fetchPage(nextPage).then(res => {
+        setData(prev => ({ ...prev, [nextPage]: res }));
+      });
+    }
+  }, [currentPage]);
+
+  return data;
+};
+
+// 使用
+const PageList = () => {
+  const [page, setPage] = useState(1);
+  const pageData = usePagePrefetch(page);
+
+  return (
+    <div>
+      {pageData[page]?.map(item => <Item key={item.id} {...item} />)}
+      <button onClick={() => setPage(page + 1)}>下一页</button>
+    </div>
+  );
+};
+```
+
+**优点：**
+- 用户切换页面时无需等待
+- 提升连续浏览体验
+
+**注意事项：**
+- 控制预加载范围，避免过度加载
+- 考虑网络状况，可选择性预加载
+
+---
+
+### 3. 流式预加载（Streaming Prefetch）
+
+先展示已知数据，剩余数据使用骨架屏占位，逐步加载完整内容。
+
+**应用场景：** 详情页、复杂表单、Dashboard等
+
+**示例：**
+```javascript
+// 流式加载详情页
+const DetailPage = ({ id }) => {
+  const [basicInfo, setBasicInfo] = useState(null);
+  const [extendedInfo, setExtendedInfo] = useState(null);
+  const [relatedData, setRelatedData] = useState(null);
+
+  useEffect(() => {
+    // 第一步：快速加载基础信息
+    fetchBasicInfo(id).then(setBasicInfo);
+
+    // 第二步：加载扩展信息
+    fetchExtendedInfo(id).then(setExtendedInfo);
+
+    // 第三步：加载关联数据
+    fetchRelatedData(id).then(setRelatedData);
+  }, [id]);
+
+  return (
+    <div>
+      {/* 基础信息 - 优先展示 */}
+      {basicInfo ? (
+        <BasicInfo data={basicInfo} />
+      ) : (
+        <Skeleton height={100} />
+      )}
+
+      {/* 扩展信息 - 次要内容 */}
+      {extendedInfo ? (
+        <ExtendedInfo data={extendedInfo} />
+      ) : (
+        <Skeleton height={200} />
+      )}
+
+      {/* 关联数据 - 最后加载 */}
+      {relatedData ? (
+        <RelatedList data={relatedData} />
+      ) : (
+        <Skeleton count={3} />
+      )}
+    </div>
+  );
+};
+```
+
+**优点：**
+- 首屏渲染快，用户感知延迟低
+- 渐进式加载，体验流畅
+- 适合数据量大、接口响应慢的场景
+
+**注意事项：**
+- 合理划分数据优先级
+- 骨架屏设计要贴近真实内容
+
+---
+
+## Next.js 预加载机制
+
+Next.js 提供了多种内置的预加载优化策略。
+
+### 1. Link 组件自动预加载
+
+Next.js 的 `<Link>` 组件会自动预加载视口内的链接页面。
+
+```javascript
+import Link from 'next/link';
+
+// 当Link出现在视口时，自动预加载 /about 页面
+<Link href="/about">
+  <a>关于我们</a>
+</Link>
+
+// 禁用预加载
+<Link href="/contact" prefetch={false}>
+  <a>联系我们</a>
+</Link>
+```
+
+**工作原理：**
+- 生产环境：Link 进入视口时自动预加载
+- 开发环境：悬浮时才预加载
+- 使用 `<link rel="prefetch">` 或 `router.prefetch()`
+
+### 2. 路由预加载 API
+
+```javascript
+import { useRouter } from 'next/router';
+
+const Navigation = () => {
+  const router = useRouter();
+
+  const handleMouseEnter = () => {
+    // 手动触发预加载
+    router.prefetch('/dashboard');
+  };
+
+  return (
+    <button 
+      onMouseEnter={handleMouseEnter}
+      onClick={() => router.push('/dashboard')}
+    >
+      进入控制台
+    </button>
+  );
+};
+```
+
+### 3. 数据预加载（SSG/SSR）
+
+**静态生成（SSG）：**
+```javascript
+// 构建时预加载数据
+export async function getStaticProps() {
+  const data = await fetchData();
+  return {
+    props: { data },
+    revalidate: 60 // ISR: 60秒后重新生成
+  };
+}
+```
+
+**服务端渲染（SSR）：**
+```javascript
+// 每次请求时预加载数据
+export async function getServerSideProps(context) {
+  const data = await fetchData(context.params.id);
+  return {
+    props: { data }
+  };
+}
+```
+
+### 4. App Router 的 Streaming（Next.js 13+）
+
+```javascript
+import { Suspense } from 'react';
+
+// app/page.js
+export default function Page() {
+  return (
+    <div>
+      {/* 立即渲染静态内容 */}
+      <Header />
+      
+      {/* 异步组件流式加载 */}
+      <Suspense fallback={<Skeleton />}>
+        <AsyncContent />
+      </Suspense>
+    </div>
+  );
+}
+
+// 异步组件
+async function AsyncContent() {
+  const data = await fetchData();
+  return <Content data={data} />;
+}
+```
+
+### 5. 图片预加载
+
+```javascript
+import Image from 'next/image';
+
+// priority: 优先加载（LCP图片）
+<Image 
+  src="/hero.jpg" 
+  alt="Hero"
+  priority
+  width={1200}
+  height={600}
+/>
+
+// 懒加载（默认行为）
+<Image 
+  src="/thumbnail.jpg" 
+  alt="Thumbnail"
+  loading="lazy"
+  width={300}
+  height={200}
+/>
+```
+
+### Next.js 预加载最佳实践
+
+1. **合理使用 prefetch**
+   - 高频访问页面：开启预加载
+   - 低频页面：关闭预加载节省资源
+
+2. **结合 Suspense 实现流式渲染**
+   - 关键内容优先渲染
+   - 次要内容延迟加载
+
+3. **利用 ISR（增量静态再生）**
+   - 静态页面 + 定时更新
+   - 兼顾性能和数据新鲜度
+
+4. **图片优化**
+   - 首屏图片使用 `priority`
+   - 其他图片自动懒加载
+
+---
+
+## 总结对比
+
+| 预加载方式 | 触发时机 | 适用场景 | 优点 | 缺点 |
+|----------|---------|---------|------|------|
+| 悬浮预加载 | 鼠标悬浮 | 表格详情、卡片 | 精准预测用户意图 | 可能浪费请求 |
+| 分页预加载 | 当前页加载完成 | 列表、分页 | 无缝翻页体验 | 可能加载无用数据 |
+| 流式预加载 | 页面加载时 | 详情页、Dashboard | 首屏快、体验好 | 实现复杂度高 |
+| Next.js Link | 进入视口 | 页面导航 | 自动化、零配置 | 仅限页面级 |
+| Next.js SSG/SSR | 构建/请求时 | 静态/动态页面 | SEO友好、性能好 | 灵活性受限 |

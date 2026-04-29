@@ -1,0 +1,450 @@
+
+## 路由传参
+```jsx
+// 旧写法 
+<Router>
+    <div className="App">           {/* ✅ 可以包裹 */}
+        <Header />                  {/* ✅ 可以放其他组件 */}
+        <div className="content">
+            <Switch>
+                <Route path="/login" component={Login} />
+            </Switch>
+        </div>
+        <Footer />                  {/* ✅ 可以放其他组件 */}
+    </div>
+</Router>
+```
+
+```java
+// 🔴 旧写法获取参数
+// 路由定义：/event/message/:id
+<Route path="/event/message/:id" component={(param) => {
+    return <EventMessage param={param} />
+}} />
+
+// 在组件中获取参数
+const EventMessage = ({ param }) => {
+    const id = param.match.params.id;  // 获取URL中的:id参数
+    const query = param.location.search; // 获取查询字符串 ?name=value
+    // ...
+}
+
+// ✅ 新写法获取参数  
+import { useParams, useSearchParams } from 'react-router-dom';
+
+const EventMessage = () => {
+    const { id } = useParams();           // 获取URL参数
+    const [searchParams] = useSearchParams(); // 获取查询参数
+    // ...
+}
+```
+
+## CTF模块WebSocket完整流程
+
+### 第一步：建立连接
+
+```jsx
+useEffect(() => {
+    // 🔐 先获取用户信息（用于身份验证）
+    instance.get("/base/user/info/").then(res => {
+        if (res.user_uuid) {
+            // 🌐 自动选择协议
+            let protocol = window.location.protocol === "http:" ? "ws:" : "wss:";
+            let host = window.location.host;
+            
+            // 🔄 先关闭旧连接（避免重复连接）
+            closeWebSocket();
+            
+            // 🚀 建立新连接
+            createWebSocket(`${protocol}//${host}/websocket/big_screen/${res.user_uuid}/${eventId}/`);
+        }
+    })
+    
+    return () => {
+        closeWebSocket();  // 组件卸载时关闭连接
+    }
+}, [])
+```
+
+### 第二步 ：ws核心管理
+
+```js
+// 📡 websocket.js 中的核心逻辑
+let createWebSocket = (url) => {
+    websocket = new WebSocket(url);
+    
+    // ✅ 连接成功
+    websocket.onopen = function() {
+        console.log('WebSocket连接已建立');
+        heartCheck.reset().start();  // 启动心跳检测
+    }
+    
+    // ❌ 连接错误
+    websocket.onerror = function() {
+        console.log('WebSocket连接错误，尝试重连');
+        reconnect(url);  // 自动重连
+    };
+    
+    // 📨 接收消息（最重要的部分）
+    websocket.onmessage = function(event) {
+        lockReconnect = true;  // 收到消息说明连接正常
+        let data = JSON.parse(event.data);
+        
+        // 🎯 根据消息类型分发到不同组件
+        if (data.msg_type === 1) {
+            PubSub.publish('open-log', data);      // 题目开放日志
+        } else if (data.msg_type === 2) {
+            PubSub.publish('solve-log', data);     // 解题成功日志
+        } else if (data.msg_type === 3) {
+            PubSub.publish('problem-upload', data); // 题目更新
+        } else if (data.msg_type === 4) {
+            PubSub.publish('rank-upload', data);   // 排行榜更新
+        }
+    }
+    
+    // 🔌 连接关闭
+    websocket.onclose = function(e) {
+        console.log('WebSocket连接关闭:', e.code, e.reason);
+    }
+}
+```
+
+### 第三步：接收消息
+
+```js
+// 📊 RankList组件独立订阅排行榜更新
+const RankList = (param) => {
+    const [data, setData] = useState([]);
+    const messageSocket = useRef();
+    
+    useEffect(() => {
+        // 🎯 订阅排行榜更新消息
+        messageSocket.current = PubSub.subscribe('rank-upload', function(topic, message) {
+            setData(message.data);  // 实时更新排行榜数据
+        });
+        
+        return () => {
+            PubSub.unsubscube(messageSocket.current);
+        }
+    }, [param])
+}
+
+// 📝 Log组件订阅日志消息
+const Log = (param) => {
+    const [openLog, setOpenLog] = useState([])
+    const [solveLog, setSolveLog] = useState([])
+    
+    useEffect(() => {
+        // 🎯 订阅题目开放日志
+        const openLogSub = PubSub.subscribe('open-log', function(topic, message) {
+            if (openLog.length === 5) {
+                openLog.unshift(message.data);
+                openLog.splice(5, 1);  // 只保留最新5条
+            } else {
+                openLog.unshift(message.data);
+            }
+            setOpenLog([...openLog]);
+        });
+        
+        // 🎯 订阅解题成功日志
+        const solveLogSub = PubSub.subscribe('solve-log', function(topic, message) {
+            if (solveLog.length === 5) {
+                solveLog.unshift(message.data);
+                solveLog.splice(5, 1);
+            } else {
+                solveLog.unshift(message.data);
+            }
+            setSolveLog([...solveLog]);
+        });
+        
+        return () => {
+            PubSub.unsubscribe(openLogSub);
+            PubSub.unsubscribe(solveLogSub);
+        }
+    }, [openLog, solveLog])
+}
+```
+
+### 心跳检测机制
+
+```js
+// 💓 防止连接意外断开的心跳检测
+let heartCheck = {
+    timeout: 60000,  // 60秒发送一次心跳
+    timeoutObj: null,
+    
+    start: function() {
+        this.timeoutObj = setInterval(function() {
+            // 📡 向服务器发送心跳包
+            websocket.send("HeartBeat");
+            console.log('发送心跳包');
+        }, this.timeout)
+    },
+    
+    reset: function() {
+        clearInterval(this.timeoutObj);
+        clearTimeout(this.serverTimeoutObj);
+        return this;
+    }
+}
+```
+
+
+
+### 断线重连机制
+
+```js
+// 🔄 连接断开时的自动重连
+let reconnect = (url) => {
+    if (lockReconnect || connect_count >= 4) return;  // 最多重连4次
+    
+    setTimeout(function() {
+        console.log(`第${connect_count + 1}次重连WebSocket`);
+        createWebSocket(url);
+        connect_count += 1;
+        lockReconnect = false;
+    }, 4000);  // 4秒后重试
+}
+```
+
+### ws完整util
+
+```js
+import { PubSub } from 'pubsub-js';
+let websocket, lockReconnect = false;
+let connect_count=0;
+let createWebSocket = (url) => {
+    websocket = new WebSocket(url);
+    websocket.onopen = function () {
+       heartCheck.reset().start();
+    }
+    websocket.onerror = function () {
+        reconnect(url);
+    };
+    websocket.onclose = function (e) {
+        console.log('websocket 断开: ' + e.code + ' ' + e.reason + ' ' + e.wasClean)
+    }
+    websocket.onmessage = function (event) {
+        lockReconnect=true;
+        let data=JSON.parse(event.data);
+        if(data.msg_type===1){
+            PubSub.publish('open-log',data);
+        }else if(data.msg_type===2){
+            PubSub.publish('solve-log',data); 
+        }else if(data.msg_type===3){
+            PubSub.publish('problem-upload',data); 
+        }else if(data.msg_type===4){
+            PubSub.publish('rank-upload',data); 
+        }
+    }
+}
+let reconnect = (url) => {
+    if (lockReconnect||connect_count>=4) return;
+    //没连接上会一直重连，设置延迟避免请求过多
+    setTimeout(function () {
+        createWebSocket(url);
+        connect_count+=1;
+        lockReconnect = false;
+    }, 4000);
+}
+let heartCheck = {
+    timeout: 60000, //60秒
+    timeoutObj: null,
+    serverTimeoutObj: null,
+    reset: function () {
+        clearInterval(this.timeoutObj);
+        clearTimeout(this.serverTimeoutObj);
+        return this;
+    },
+    start: function () {
+        this.timeoutObj = setInterval(function () {
+            //这里发送一个心跳，后端收到后，返回一个心跳消息，
+            //onmessage拿到返回的心跳就说明连接正常
+            websocket.send("HeartBeat");
+        }, this.timeout)
+    }
+}
+//关闭连接
+let closeWebSocket=()=> {
+    websocket && websocket.close();
+}
+export {
+    websocket,
+    createWebSocket,
+    closeWebSocket
+};
+
+```
+
+## 分页组件的使用
+
+1. 导入分页组件
+
+```js
+// src/js/ScoreCenter/list.js
+import Page from "../Communal/Page";
+```
+
+2. 设置分页相关的state
+
+```js
+const List = () => {
+    // 🔍 筛选条件（包含分页信息）
+    const [filter, setFilter] = useState({
+        page: 1,        // 当前页码
+        size: 10,       // 每页显示条数
+        classify: [],   // 分类筛选
+        keyword: [],    // 关键词筛选
+        search: "",     // 搜索内容
+    });
+    
+    // 📊 数据和总数
+    const [initData, setInitData] = useState({
+        data: [],       // 当前页数据
+        allCount: 0     // 数据总条数
+    });
+```
+
+3. 定义分页回调函数
+
+```js
+// 🎯 点击分页按钮的回调函数
+let getPages = (page) => {
+    filter.page = page;          // 更新当前页码
+    setFilter({ ...filter })     // 触发重新获取数据
+}
+
+// 📡 获取数据的函数（会根据filter自动调用）
+const getData = () => {
+    instance.get("/event/", { params: filter }).then(res => {
+        initData.data = res.results;    // 设置当前页数据
+        initData.allCount = res.count;  // 设置总条数
+        setInitData({ ...initData })
+    })
+}
+
+// 🔄 当filter改变时自动获取数据
+useEffect(() => {
+    getData();
+}, [filter]);
+```
+
+4. 使用page组件
+
+```js
+{
+    // 💡 只有当总数大于每页显示数时才显示分页
+    (initData.allCount > filter.size) &&
+    <div className="flip-over">
+        <Page
+            key="page"
+            upDown          // ✅ 显示上一页下一页按钮
+            pageNumber      // ✅ 显示页码数字列表
+            allNumber       // ✅ 显示总页数
+            nowpage={filter.page}           // 🎯 当前页码
+            allPage={initData.allCount}     // 🎯 数据总条数
+            everyPage={filter.size}         // 🎯 每页显示条数
+            onClick={getPages}              // 🎯 点击分页按钮的回调
+        />
+    </div>
+}
+```
+
+5. 完成使用
+
+```js
+const MyListPage = () => {
+    // 1️⃣ 状态管理
+    const [filter, setFilter] = useState({
+        page: 1,
+        size: 10
+    });
+    const [data, setData] = useState({
+        list: [],
+        total: 0
+    });
+    
+    // 2️⃣ 获取数据
+    const fetchData = () => {
+        api.getList(filter).then(res => {
+            setData({
+                list: res.results,
+                total: res.count
+            });
+        });
+    };
+    
+    // 3️⃣ 分页回调
+    const handlePageChange = (page) => {
+        setFilter(prev => ({ ...prev, page }));
+    };
+    
+    const handleSizeChange = (size) => {
+        setFilter(prev => ({ ...prev, size, page: 1 }));
+    };
+    
+    // 4️⃣ 自动获取数据
+    useEffect(() => {
+        fetchData();
+    }, [filter]);
+    
+    return (
+        <div>
+            {/* 数据列表 */}
+            {data.list.map(item => <div key={item.id}>{item.name}</div>)}
+            
+            {/* 分页组件 */}
+            {data.total > filter.size && (
+                <Page
+                    headEnd
+                    upDown  
+                    pageNumber
+                    allNumber
+                    selectNumber
+                    nowpage={filter.page}
+                    allPage={data.total}
+                    everyPage={filter.size}
+                    onClick={handlePageChange}
+                    changeNum={handleSizeChange}
+                />
+            )}
+        </div>
+    );
+};
+```
+
+## 请求参数
+
+路径参数
+
+```js
+// 路由定义
+<Route path="/event/topic/:id/:type" />
+
+// 实际URL
+http://localhost:3000/#/event/topic/123/ctf
+                                    ^^^ ^^^
+                                    |   |
+                                   id  type
+
+// React Router自动解析成
+param.match.params = {
+    id: "123",
+    type: "ctf"
+}
+```
+
+查询参数
+
+```js
+// 如果是查询参数的话，URL会是这样：
+http://localhost:3000/#/event/topic?id=123&type=ctf
+                                    ^^^^^^^^^^^^^^
+                                    查询字符串
+
+// 获取方式完全不同
+const searchParams = new URLSearchParams(window.location.search);
+const id = searchParams.get('id');     // "123"  
+const type = searchParams.get('type'); // "ctf"
+```
+

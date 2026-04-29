@@ -1,0 +1,18 @@
+export default {
+  前端常见性能指标: '性能指标',
+  前端文件下载n种方法: '文件下载',
+  双Token鉴权实现无感刷新: '双 Token 鉴权',
+  'Tailwind CSS优势与痛点': 'Tailwind CSS',
+  shadcn表格封装: 'shadcn table',
+  'Zod-类型与校验的统一之md': 'Zod 类型校验',
+  为什么不推荐foreach: 'forEach 讨论',
+  拖拽裁切问题解决: '拖拽裁切问题',
+  性能优化常见方向: '性能优化',
+  预加载与Next预加载: '预加载与 Next',
+  'Post为什么会发送两次请求': 'POST 预检请求',
+  HLS: 'HLS 视频播放',
+  raf: 'requestAnimationFrame',
+  reload: 'LiveServer 热重载',
+  大文件切片上传实现详解: '大文件上传',
+  凌虚记录: 'WebSocket 封装',
+}

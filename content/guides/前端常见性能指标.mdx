@@ -1,0 +1,287 @@
+# 前端常见性能指标
+
+## 1. 核心指标（Core Web Vitals）
+
+Core Web Vitals（核心指标）是 Google 提出的衡量网页用户体验的关键指标，目前由三项组成：**LCP + INP + CLS**。
+
+> 💡 可以按 F12 打开 Chrome DevTools，切换到 Performance 页签查看这三个指标。
+
+---
+
+### LCP (Largest Contentful Paint) 最大内容绘制
+
+📖 [官方文档](https://web.dev/articles/lcp)
+
+**定义：** 指视窗内最大的可见元素（通常是大图、视频或大段文本）完全渲染出来需要的时间。
+
+**评分标准：**
+- ✅ 优秀：≤ 2.5s
+- ⚠️ 需要改进：2.5s - 4.0s
+- ❌ 差：> 4.0s
+
+#### 工作原理
+
+浏览器会持续监听屏幕上出现的元素，不断更新"当前最大的那个元素"是谁，直到用户开始交互。一旦用户进行了交互（点击、滚动、按键），或者页面被隐藏，浏览器就会停止寻找，并把最后一次确定的最大元素的渲染时间记为 LCP 时间。
+
+#### 常见优化策略
+
+1. **图片优化**
+   ```html
+   <!-- 使用现代图片格式 -->
+   <img src="hero.webp" alt="Hero" fetchpriority="high" />
+   
+   <!-- 响应式图片 -->
+   <picture>
+     <source srcset="hero.webp" type="image/webp">
+     <img src="hero.jpg" alt="Hero">
+   </picture>
+   ```
+
+2. **提高资源优先级**
+   ```html
+   <!-- 预加载关键资源 -->
+   <link rel="preload" as="image" href="hero.jpg" fetchpriority="high">
+   ```
+   > 📚 [fetchpriority 文档](https://developer.mozilla.org/zh-CN/docs/Web/HTML/Reference/Attributes/fetchpriority)
+
+3. **使用 CDN** - 图片托管到 CDN，减少加载时间
+
+4. **考虑 SSR/SSG** - 服务端渲染可以让关键内容第一时间呈现，无需等待 JS 加载完毕
+
+---
+
+### INP (Interaction to Next Paint) 下次绘制交互
+
+📖 [官方文档](https://web.dev/articles/inp)
+
+**定义：** 指用户与页面进行交互（点击按钮、输入文字等）到浏览器通过下一帧绘制做出视觉反馈的延迟时间。
+
+**评分标准：**
+- ✅ 优秀：≤ 200ms
+- ⚠️ 需要改进：200ms - 500ms
+- ❌ 差：> 500ms
+
+> 📌 INP 已于 **2024年3月** 正式取代了旧指标 FID (First Input Delay)。INP 比 FID 更严格，它监测页面整个生命周期内的所有交互延迟，而不仅仅是第一次。
+
+#### 工作原理
+
+INP 会监测页面生命周期内所有的交互，然后取耗时最长的那次交互时间作为最终分数。
+
+#### INP 的三个阶段
+
+```
+用户交互 → [输入延迟] → [处理时间] → [呈现延迟] → 视觉反馈
+```
+
+1. **输入延迟（Input Delay）**
+   - 从用户操作（如点击）到 JS 事件回调函数真正开始运行之前的时间
+   - 原因：JS 是单线程，主线程可能有其他任务在执行
+
+2. **处理时间（Processing Time）**
+   - 事件回调函数的执行所需时间
+
+3. **呈现延迟（Presentation Delay）**
+   - 代码执行完后，浏览器重新计算样式、布局并绘制到屏幕的时间
+
+#### 常见优化策略
+
+1. **减少主线程阻塞**
+   ```javascript
+   // ❌ 长任务阻塞主线程
+   button.addEventListener('click', () => {
+     heavyComputation(); // 耗时操作
+   });
+
+   // ✅ 使用 Web Worker
+   const worker = new Worker('worker.js');
+   button.addEventListener('click', () => {
+     worker.postMessage(data);
+   });
+   ```
+
+2. **任务分片**
+   ```javascript
+   // ✅ 使用 requestIdleCallback 分片执行
+   function processLargeArray(items) {
+     const chunk = items.splice(0, 50);
+     chunk.forEach(item => process(item));
+     
+     if (items.length > 0) {
+       requestIdleCallback(() => processLargeArray(items));
+     }
+   }
+   ```
+
+3. **防抖节流**
+   ```javascript
+   // 防抖：减少频繁触发
+   const debouncedSearch = debounce((value) => {
+     searchAPI(value);
+   }, 300);
+   ```
+
+---
+
+### CLS (Cumulative Layout Shift) 累积布局偏移
+
+📖 [官方文档](https://web.dev/articles/cls)
+
+**定义：** 用来衡量视觉稳定性，量化页面元素意外移动的程度。
+
+**评分标准：**
+- ✅ 优秀：≤ 0.1
+- ⚠️ 需要改进：0.1 - 0.25
+- ❌ 差：> 0.25
+
+#### 计算公式
+
+```
+layout shift score = impact fraction × distance fraction
+```
+
+- **impact fraction**：元素移动前后影响的视口面积占比
+- **distance fraction**：元素移动的最大距离占视口的比例
+
+简单来说：**越大的元素，偏移距离越远，CLS 分数越差。**
+
+#### 常见问题及解决方案
+
+##### 1. 图片未定义尺寸
+
+**问题：** 图片加载慢，加载完成后撑开布局导致偏移。
+
+```css
+/* ❌ 未设置尺寸 */
+img {
+  width: 100%;
+}
+
+/* ✅ 使用 aspect-ratio 预留空间 */
+.card-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;  /* 锁定宽高比 */
+  object-fit: cover;      /* 确保图片不拉伸 */
+}
+```
+
+```html
+<!-- ✅ 直接指定宽高 -->
+<img src="photo.jpg" width="800" height="600" alt="Photo">
+```
+
+##### 2. 动态插入内容
+
+**问题：** 广告、通知等动态内容插入时挤压现有内容。
+
+```css
+/* ✅ 预留容器空间（骨架屏） */
+.ad-container {
+  min-height: 250px;
+  background: #f0f0f0;
+}
+
+.notification-space {
+  height: 60px; /* 预留通知栏高度 */
+}
+```
+
+##### 3. 错误使用动画
+
+**问题：** 使用会触发重排的属性做动画。
+
+```css
+/* ❌ 触发重排 */
+.box {
+  animation: slideDown 0.3s;
+}
+@keyframes slideDown {
+  from { margin-top: -100px; }
+  to { margin-top: 0; }
+}
+
+/* ✅ 使用 transform */
+.box {
+  animation: slideDown 0.3s;
+}
+@keyframes slideDown {
+  from { transform: translateY(-100px); }
+  to { transform: translateY(0); }
+}
+```
+
+##### 4. Web 字体加载
+
+```css
+/* ✅ 使用 font-display 控制字体加载行为 */
+@font-face {
+  font-family: 'CustomFont';
+  src: url('font.woff2') format('woff2');
+  font-display: swap; /* 先用系统字体，加载完再替换 */
+}
+```
+
+---
+
+## 2. 其他重要性能指标
+
+### FCP (First Contentful Paint) 首次内容绘制
+
+首次渲染任何文本、图像、非空白 canvas 或 SVG 的时间。
+
+- ✅ 优秀：≤ 1.8s
+- ⚠️ 需要改进：1.8s - 3.0s
+- ❌ 差：> 3.0s
+
+### TTFB (Time to First Byte) 首字节时间
+
+从发起请求到接收到第一个字节的时间。
+
+- ✅ 优秀：≤ 800ms
+- ⚠️ 需要改进：800ms - 1800ms
+- ❌ 差：> 1800ms
+
+### TBT (Total Blocking Time) 总阻塞时间
+
+FCP 和 TTI 之间所有长任务的阻塞时间总和。
+
+- ✅ 优秀：≤ 200ms
+- ⚠️ 需要改进：200ms - 600ms
+- ❌ 差：> 600ms
+
+---
+
+## 性能监控工具
+
+1. **Chrome DevTools**
+   - Lighthouse：综合性能评分
+   - Performance：详细性能分析
+   - Network：网络请求分析
+
+2. **在线工具**
+   - [PageSpeed Insights](https://pagespeed.web.dev/)
+   - [WebPageTest](https://www.webpagetest.org/)
+
+3. **真实用户监控（RUM）**
+   ```javascript
+   // 使用 Web Vitals 库
+   import {onCLS, onINP, onLCP} from 'web-vitals';
+
+   onCLS(console.log);
+   onINP(console.log);
+   onLCP(console.log);
+   ```
+
+---
+
+## 性能优化检查清单
+
+- [ ] 图片使用现代格式（WebP/AVIF）并压缩
+- [ ] 关键资源设置 fetchpriority="high"
+- [ ] 图片/视频设置明确的宽高或 aspect-ratio
+- [ ] 动态内容使用骨架屏预留空间
+- [ ] 动画使用 transform/opacity 而非布局属性
+- [ ] 字体使用 font-display: swap
+- [ ] 长任务拆分或使用 Web Worker
+- [ ] 使用 CDN 加速静态资源
+- [ ] 考虑 SSR/SSG 提升首屏速度
+- [ ] 定期使用 Lighthouse 检测性能

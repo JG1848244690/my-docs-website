@@ -1,0 +1,226 @@
+# React + Vite + Electron 桌面应用
+
+这是一个基于 React + Vite 的现代化桌面应用程序，集成了 Electron、Antd UI 组件库、TailwindCSS、Zustand 状态管理等技术栈。
+
+## 技术栈
+
+- **前端框架**: React 18 + Vite
+- **桌面应用**: Electron 38
+- **UI 组件库**: Ant Design 5.x
+- **样式框架**: TailwindCSS 4.x
+- **状态管理**: Zustand
+- **图表库**: ECharts
+- **动画库**: Framer Motion + GSAP
+- **HTTP 请求**: Axios
+- **路由**: React Router DOM
+- **构建打包**: electron-builder
+
+## 功能特性
+
+- 🖥️ 跨平台桌面应用（Windows、macOS、Linux）
+- 📱 响应式 UI 设计
+- 🎨 现代化界面（Antd + TailwindCSS）
+- 📊 数据可视化（ECharts）
+- ⚡ 快速开发体验（Vite 热重载）
+- 🔄 优雅的状态管理（Zustand）
+- 🎭 丰富的动画效果
+- 📝 **强大的文档管理器**
+  - 三栏式布局（文件列表 + 编辑器 + 目录导航）
+  - Markdown 文件的创建、编辑、保存、删除
+  - 实时预览和编辑模式切换
+  - 智能目录提取和锚点跳转
+  - 文件搜索和排序功能
+  - 文件大小和修改时间显示
+- 🎬 视频背景支持（自适应窗口尺寸）
+- 🎨 自定义滚动条样式（现代化设计）
+
+## 开发环境搭建
+
+### 前置要求
+- Node.js >= 16
+- npm 或 yarn
+
+### 安装依赖
+```bash
+npm install
+# 或
+yarn install
+```
+
+## 开发模式
+
+### 启动 Web 开发服务器
+```bash
+npm run dev
+```
+
+
+### 启动 Electron 应用
+```bash
+# 首先构建前端代码
+npm run build
+
+# 然后启动 Electron
+npm run electron
+```
+
+## 生产环境打包
+
+### 构建前端代码
+```bash
+npm run build
+```
+
+### 打包桌面应用
+
+#### Windows 平台
+```bash
+npm run build:win
+```
+
+#### macOS 平台
+```bash
+npm run build:mac
+```
+
+#### Linux 平台
+```bash
+npm run build:linux
+```
+
+#### 打包所有平台
+```bash
+npm run build:all
+```
+
+## 项目结构
+
+```
+my-app/
+├── public/                # 静态资源目录
+│   ├── welcome.mp4        # 欢迎页面背景视频
+│   └── vite.svg          # Vite 图标
+├── src/                   # React 源码目录
+│   ├── components/        # React 组件
+│   │   ├── InkButton.jsx  # 水墨风格按钮组件
+│   │   ├── index.js       # 组件导出文件
+│   │   └── README.md      # 组件使用文档
+│   ├── pages/            # 页面组件
+│   │   ├── welcome/      # 欢迎页面（支持视频背景）
+│   │   ├── doc/          # 📁 文档管理器页面
+│   │   │   └── index.jsx # 三栏式文档编辑界面
+│   │   ├── home/         # 主页面
+│   │   ├── login/        # 登录页面
+│   │   └── register/     # 注册页面
+│   ├── stores/           # Zustand 状态管理
+│   │   ├── docStore.js   # 📁 文档管理状态管理
+│   │   └── ...           # 其他状态管理
+│   ├── utils/            # 工具函数
+│   ├── router/           # 路由配置
+│   ├── layout/           # 布局组件
+│   ├── hooks/            # 自定义Hooks
+│   ├── assets/           # 编译时资源（图片、图标等）
+│   └── App.jsx           # 主应用组件
+├── dist/                 # Vite 构建输出
+├── build/                # Electron 打包输出
+├── electron-main.cjs     # Electron 主进程（含文件系统API）
+├── preload.js            # 📁 Preload脚本（安全暴露文件系统API）
+├── package.json          # 项目配置
+├── vite.config.js        # Vite 配置
+└── tailwind.config.js    # TailwindCSS 配置
+```
+
+## 配置说明
+
+### Electron 配置
+- 主进程文件：`electron-main.cjs`
+- 支持开发环境热重载
+- 支持生产环境资源加载
+
+### 打包配置
+- 使用 electron-builder 进行打包
+- 支持 Windows (.exe)、macOS (.dmg)、Linux (.AppImage) 格式
+- 自动生成应用图标和安装包
+
+## 静态资源管理
+
+### 视频背景设置
+- 将视频文件放在 `public/` 目录下
+- 支持 MP4 格式，建议压缩优化文件大小
+- 在代码中使用绝对路径引用：`/your-video.mp4`
+- 自动适应窗口尺寸变化，使用 `object-cover` 保持比例
+
+### 资源文件组织
+- `public/`: 静态资源文件（视频、图标等），不经过构建处理
+- `src/assets/`: 需要构建处理的资源文件（会被优化压缩）
+
+## UI/UX 定制
+
+### 自定义滚动条
+- 全局美化滚动条样式，支持浅色和深色主题
+- 渐变色彩设计（蓝紫色主题）
+- 悬停动画效果和圆角设计
+- 跨浏览器兼容（Webkit、Firefox）
+- 自动适应系统主题偏好
+
+### 样式定制
+- 所有全局样式在 `src/index.css` 中定义
+- 使用 TailwindCSS 作为主要样式框架
+- 支持字体平滑渲染优化
+- 美化文本选中效果
+
+### 文档管理器功能说明
+
+#### 📁 文档管理器 (`/doc`)
+一个功能完整的Markdown文档管理和编辑工具：
+
+**核心功能：**
+- **三栏式界面布局**
+  - 左侧：文件列表和搜索
+  - 中间：Markdown编辑器和预览
+  - 右侧：文档目录导航
+
+**文件管理：**
+- 选择包含MD文件的文件夹
+- 自动扫描和列出所有.md文件
+- 支持文件名搜索过滤
+- 显示文件大小和修改时间
+- 创建新的Markdown文件
+- 删除文件（带确认提示）
+
+**编辑功能：**
+- 使用 `md-editor-rt` 提供专业的Markdown编辑体验
+- 实时预览和编辑模式切换
+- 支持快捷键保存（Ctrl+S）
+- 未保存更改提醒
+
+**导航辅助：**
+- 智能提取文档标题生成目录
+- 点击目录项快速跳转到对应章节
+- 支持1-6级标题的层级显示
+
+**使用步骤：**
+1. 访问 `/doc` 路由进入文档管理器
+2. 点击"选择文件夹"选择包含MD文件的目录
+3. 在左侧列表中点击文件名打开文档
+4. 点击"编辑"按钮进入编辑模式
+5. 编辑完成后点击"保存"或使用Ctrl+S保存
+6. 使用右侧目录快速跳转到文档章节
+
+### UI 组件库
+- **InkButton**: 水墨风格按钮组件
+  - 支持多种尺寸（small、medium、large）
+  - 两种变体风格（primary、secondary）
+  - 水墨晕染悬停效果
+  - 特殊切角形状设计
+  - 详细使用说明见 `src/components/README.md`
+
+## 开发提示
+
+1. **开发时**：先运行 `npm run dev` 启动 Web 服务器，然后运行 `npm run electron`
+2. **调试**：Electron 应用中可以通过 Ctrl+Shift+I (Windows/Linux) 或 Cmd+Option+I (macOS) 打开开发者工具
+3. **热重载**：修改前端代码会自动刷新，修改 Electron 主进程代码需要重启应用
+4. **打包前**：确保先运行 `npm run build` 构建最新的前端代码
+5. **视频资源**：大文件建议放在 `public/` 目录，避免影响构建性能
+
+改了代码打包之前先把elemainjs复制到build下 记得改名字

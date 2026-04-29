@@ -1,0 +1,688 @@
+# shadcn Table 与 Filter 驱动模式实现指南
+
+## 核心思想
+
+**将 Ant Design 的 filter 驱动模式移植到 shadcn Table**，实现后端分页、排序、筛选的统一管理。
+
+---
+
+## 架构设计
+
+### 1. 数据流向
+```
+用户操作 → 更新 filter 对象 → useDebounceEffect 监听 → 调用 getData() → 后端请求 → 更新表格数据
+```
+
+### 2. 核心对象：filter
+```typescript
+type FilterType = {
+    page: number        // 分页
+    size: number        // 每页条数
+    ordering?: string   // 排序字段（'field' 升序，'-field' 降序）
+    status?: string     // 筛选条件
+    search?: string     // 搜索关键词
+}
+```
+
+---
+
+## 实现步骤
+
+### 步骤 1：定义 filter 类型（store.tsx）
+
+```typescript
+import { create } from 'zustand'
+
+export type FilterType = {
+    page: number
+    size: number
+    ordering?: string
+    status?: string
+    search?: string
+}
+
+type Payment = {
+    id: string
+    amount: number
+    status: "pending" | "processing" | "success" | "failed"
+    email: string
+}
+
+type StoreState = {
+    payments: Payment[]
+    totalCount: number
+    filter: FilterType
+    loading: Record<string, unknown>
+    getData: (params: Record<string, unknown>) => void
+    updates: (params: Partial<StoreState>) => void
+}
+
+export const store = create<StoreState>((set, get) => ({
+    payments: [],
+    totalCount: 0,
+    filter: { page: 1, size: 10 },
+    loading: {},
+    
+    getData: async (params) => {
+        const { filter } = get()
+        set({ loading: { table: true } })
+        
+        // 调用后端 API，将 filter 转换为 URL 查询参数
+        // const response = await fetch(`/api/payments?${new URLSearchParams(filter)}`)
+        
+        // 模拟数据...
+        set({
+            payments: data,
+            totalCount: total,
+            loading: { table: false }
+        })
+    },
+    
+    updates: (params) => set({ ...params }),
+}))
+```
+
+### 步骤 2：扩展 TableMeta 类型（data-table.tsx）
+
+```typescript
+import {
+    type ColumnDef,
+    flexRender,
+    getCoreRowModel,
+    useReactTable,
+} from "@tanstack/react-table"
+import { type FilterType } from './store'
+import { X } from 'lucide-react'
+
+// 扩展 TableMeta 类型
+declare module '@tanstack/react-table' {
+    interface TableMeta<TData> {
+        onSort?: (field: string) => void
+        onFilterChange?: (field: string, value: string) => void
+        currentFilter?: Record<string, any>
+    }
+}
+
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
+
+interface DataTableProps<TData, TValue> {
+    columns: ColumnDef<TData, TValue>[]
+    data: TData[]
+    totalCount: number
+    loading: boolean
+    filter: FilterType
+    onPaginationChange: (page: number, size: number) => void
+    onSort: (field: string) => void
+    onFilterChange: (field: string, value: string) => void
+}
+
+export function DataTable<TData, TValue>({
+    columns,
+    data,
+    totalCount,
+    loading,
+    filter,
+    onPaginationChange,
+    onSort,
+    onFilterChange,
+}: DataTableProps<TData, TValue>) {
+    const table = useReactTable({
+        data,
+        columns,
+        getCoreRowModel: getCoreRowModel(),
+        meta: {
+            onSort,
+            onFilterChange,
+            currentFilter: filter,
+        },
+    })
+
+    const totalPages = Math.ceil(totalCount / filter.size)
+
+    return (
+        <div>
+            {/* 搜索框 */}
+            <div className="flex items-center py-4">
+                <div className="relative max-w-sm">
+                    <Input
+                        placeholder="输入搜索内容"
+                        value={filter.search ?? ""}
+                        onChange={(e) => onFilterChange('search', e.target.value)}
+                        className="pr-8"
+                    />
+                    {filter.search && (
+                        <X
+                            className="absolute right-2 top-2.5 h-4 w-4 cursor-pointer text-gray-400 hover:text-gray-600"
+                            onClick={() => onFilterChange('search', '')}
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* 表格 */}
+            <div className="overflow-hidden rounded-md border">
+                <Table>
+                    <TableHeader>
+                        {table.getHeaderGroups().map((headerGroup) => (
+                            <TableRow key={headerGroup.id}>
+                                {headerGroup.headers.map((header) => (
+                                    <TableHead key={header.id}>
+                                        {header.isPlaceholder
+                                            ? null
+                                            : flexRender(
+                                                header.column.columnDef.header,
+                                                header.getContext()
+                                            )}
+                                    </TableHead>
+                                ))}
+                            </TableRow>
+                        ))}
+                    </TableHeader>
+
+                    <TableBody>
+                        {loading ? (
+                            Array.from({ length: filter.size }).map((_, i) => (
+                                <TableRow key={i}>
+                                    {columns.map((_, j) => (
+                                        <TableCell key={j}>
+                                            <Skeleton className="h-4 w-full" />
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            ))
+                        ) : table.getRowModel().rows?.length ? (
+                            table.getRowModel().rows.map((row) => (
+                                <TableRow key={row.id}>
+                                    {row.getVisibleCells().map((cell) => (
+                                        <TableCell key={cell.id}>
+                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={columns.length} className="h-24 text-center">
+                                    暂无数据。
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
+
+            {/* 分页 */}
+            <div className="flex items-center justify-between py-4">
+                <div className="text-sm text-muted-foreground">
+                    第 {filter.page} 页，共 {totalPages} 页 | 总计 {totalCount} 条
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onPaginationChange(filter.page - 1, filter.size)}
+                        disabled={filter.page <= 1}
+                    >
+                        上一页
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onPaginationChange(filter.page + 1, filter.size)}
+                        disabled={filter.page >= totalPages}
+                    >
+                        下一页
+                    </Button>
+                </div>
+            </div>
+        </div>
+    )
+}
+```
+
+### 步骤 3：定义列配置（columns.tsx）
+
+```typescript
+import { type ColumnDef } from "@tanstack/react-table"
+import { MoreHorizontal, ArrowUpDown, Filter } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+export type Payment = {
+    id: string
+    amount: number
+    status: "pending" | "processing" | "success" | "failed"
+    email: string
+}
+
+export const columns: ColumnDef<Payment>[] = [
+    // 筛选列
+    {
+        accessorKey: "status",
+        header: ({ table }) => {
+            const currentFilter = (table.options.meta as any)?.currentFilter?.status
+            return (
+                <div className="flex justify-center">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost">
+                                Status
+                                <Filter className={`ml-2 h-4 w-4 ${currentFilter ? 'text-blue-500' : ''}`} />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="center">
+                            <DropdownMenuLabel>筛选状态</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => table.options.meta?.onFilterChange?.('status', '')}>
+                                全部
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => table.options.meta?.onFilterChange?.('status', 'pending')}>
+                                pending
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => table.options.meta?.onFilterChange?.('status', 'processing')}>
+                                processing
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => table.options.meta?.onFilterChange?.('status', 'success')}>
+                                success
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => table.options.meta?.onFilterChange?.('status', 'failed')}>
+                                failed
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            )
+        },
+        cell: ({ row }) => (
+            <div className="text-center font-medium">{row.getValue("status")}</div>
+        )
+    },
+
+    // 排序列
+    {
+        accessorKey: "amount",
+        header: ({ table }) => {
+            const ordering = (table.options.meta as any)?.currentFilter?.ordering
+            const isAsc = ordering === 'amount'
+            const isDesc = ordering === '-amount'
+            return (
+                <div className="flex justify-center">
+                    <Button
+                        variant="ghost"
+                        onClick={() => table.options.meta?.onSort?.('amount')}
+                    >
+                        Amount
+                        <ArrowUpDown className={`ml-2 h-4 w-4 ${isAsc || isDesc ? 'text-blue-500' : ''}`} />
+                    </Button>
+                </div>
+            )
+        },
+        cell: ({ row }) => {
+            const amount = parseFloat(row.getValue("amount"))
+            const formatted = new Intl.NumberFormat("en-US", {
+                style: "currency",
+                currency: "USD",
+            }).format(amount)
+            return <div className="text-center font-medium">{formatted}</div>
+        },
+    },
+
+    {
+        accessorKey: "email",
+        header: ({ table }) => {
+            const ordering = (table.options.meta as any)?.currentFilter?.ordering
+            const isAsc = ordering === 'email'
+            const isDesc = ordering === '-email'
+            return (
+                <div className="flex justify-center">
+                    <Button
+                        variant="ghost"
+                        onClick={() => table.options.meta?.onSort?.('email')}
+                    >
+                        Email
+                        <ArrowUpDown className={`ml-2 h-4 w-4 ${isAsc || isDesc ? 'text-blue-500' : ''}`} />
+                    </Button>
+                </div>
+            )
+        },
+        cell: ({ row }) => (
+            <div className="text-center font-medium">{row.getValue("email") || '--'}</div>
+        )
+    },
+
+    // 操作列
+    {
+        header: "操作",
+        id: "actions",
+        cell: ({ row }) => {
+            const payment = row.original
+            return (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">打开菜单</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>操作</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => navigator.clipboard.writeText(payment.id)}>
+                            复制付款 ID
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem>查看客户</DropdownMenuItem>
+                        <DropdownMenuItem>查看支付详情</DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )
+        },
+    },
+]
+```
+
+### 步骤 4：页面组件处理 filter 更新（index.tsx）
+
+```typescript
+import { store } from './store'
+import { columns } from "./columns"
+import { DataTable } from "./data-table"
+import { useDebounceEffect } from 'ahooks'
+
+export default function Index() {
+    const { getData, payments, totalCount, loading, filter, updates } = store()
+
+    // 防抖请求
+    useDebounceEffect(() => {
+        getData(filter)
+    }, [filter], { wait: 200 })
+
+    // 分页
+    const changePages = (page: number, size: number) => {
+        let data = { ...filter }
+        if (filter.size !== size) {
+            data.page = 1
+            data.size = size
+        } else {
+            data.page = page
+        }
+        updates({ filter: data })
+    }
+
+    // 排序（三态切换）
+    const handleSort = (field: string) => {
+        let data = { ...filter }
+        if (data.ordering === field) {
+            data.ordering = `-${field}`  // 升序 → 降序
+        } else if (data.ordering === `-${field}`) {
+            delete data.ordering         // 降序 → 无序
+        } else {
+            data.ordering = field        // 无序 → 升序
+        }
+        data.page = 1  // 排序后回到第一页
+        updates({ filter: data })
+    }
+
+    // 筛选/搜索
+    const handleFilterChange = (field: string, value: string) => {
+        const data: any = { ...filter }
+        if (value) {
+            data[field] = value
+        } else {
+            delete data[field]
+        }
+        data.page = 1  // 所有筛选都重置页码
+        updates({ filter: data })
+    }
+
+    // 生成 URL 查询字符串
+    const queryString = new URLSearchParams(
+        Object.entries(filter).reduce((acc, [key, value]) => {
+            if (value !== undefined && value !== null) {
+                acc[key] = String(value)
+            }
+            return acc
+        }, {} as Record<string, string>)
+    ).toString()
+
+    return (
+        <div className="container p-10 bg-[white] w-[95%] mx-auto py-10">
+            <DataTable
+                columns={columns}
+                data={payments}
+                totalCount={totalCount}
+                loading={loading.table as boolean}
+                filter={filter}
+                onPaginationChange={changePages}
+                onSort={handleSort}
+                onFilterChange={handleFilterChange}
+            />
+            
+            {/* 调试用：显示 URL 查询字符串 */}
+            <div className="mt-4 p-4 bg-gray-100 rounded-md">
+                <div className="text-sm font-semibold mb-2">URL 查询字符串：</div>
+                <code className="text-sm text-blue-600">?{queryString}</code>
+            </div>
+        </div>
+    )
+}
+```
+
+---
+
+## 关键技术点
+
+### 1. TableMeta 扩展
+使用 TypeScript 模块扩展（module augmentation）将回调函数和状态传递给列定义：
+
+```typescript
+declare module '@tanstack/react-table' {
+    interface TableMeta<TData> {
+        onSort?: (field: string) => void
+        onFilterChange?: (field: string, value: string) => void
+        currentFilter?: Record<string, any>
+    }
+}
+```
+
+### 2. filter 对象即 URL 参数
+```typescript
+// filter 对象
+{ page: 1, size: 10, status: 'pending', ordering: '-email', search: 'test' }
+
+// 转换为 URL
+?page=1&size=10&status=pending&ordering=-email&search=test
+```
+
+### 3. 排序三态切换
+```
+无排序 → field → -field → 删除 → 无排序
+```
+
+- `ordering: 'email'` - 升序
+- `ordering: '-email'` - 降序
+- `ordering: undefined` - 无排序
+
+### 4. 筛选/搜索重置页码
+```typescript
+data.page = 1  // 避免筛选后停留在空页
+```
+
+### 5. 防抖优化
+```typescript
+useDebounceEffect(() => {
+    getData(filter)
+}, [filter], { wait: 200 })
+```
+
+---
+
+## 与 Ant Design Table 的对比
+
+| 特性 | Ant Design | shadcn + filter 模式 |
+|------|-----------|---------------------|
+| **分页** | `pagination={{ current, pageSize }}` | `filter: { page, size }` |
+| **排序** | `onChange` 回调的 `sorter` 参数 | `filter: { ordering }` |
+| **筛选** | `onChange` 回调的 `filters` 参数 | `filter: { status, search }` |
+| **数据请求** | 在 `onChange` 中调用 | useDebounceEffect 监听 filter |
+| **状态管理** | 组件内部 state | zustand store |
+| **URL 同步** | 需要手动实现 | filter 直接转换为 URL |
+
+---
+
+## 优势
+
+1. ✅ **统一的数据流**：所有操作都通过 filter 对象
+2. ✅ **类型安全**：TypeScript 完整支持
+3. ✅ **易于调试**：filter 对象可直接转换为 URL
+4. ✅ **防抖优化**：useDebounceEffect 避免频繁请求
+5. ✅ **状态持久化**：filter 存储在 zustand，可跨组件共享
+6. ✅ **符合 RESTful**：filter 直接映射到 URL 查询参数
+7. ✅ **灵活扩展**：可轻松添加新的筛选字段
+
+---
+
+## 最佳实践
+
+### 1. 所有筛选/排序操作都重置页码到 1
+```typescript
+data.page = 1  // 避免用户停留在空页
+```
+
+### 2. 使用 FilterType 统一类型定义
+```typescript
+export type FilterType = {
+    page: number
+    size: number
+    ordering?: string
+    status?: string
+    search?: string
+}
+```
+
+### 3. 通过 TableMeta 传递回调和状态
+```typescript
+meta: {
+    onSort,
+    onFilterChange,
+    currentFilter: filter,
+}
+```
+
+### 4. 排序/筛选激活时显示视觉反馈
+```typescript
+<ArrowUpDown className={isActive ? 'text-blue-500' : ''} />
+<Filter className={currentFilter ? 'text-blue-500' : ''} />
+```
+
+### 5. 搜索框添加清除按钮
+```typescript
+{filter.search && (
+    <X onClick={() => onFilterChange('search', '')} />
+)}
+```
+
+### 6. 使用 useDebounceEffect 防抖
+```typescript
+useDebounceEffect(() => {
+    getData(filter)
+}, [filter], { wait: 200 })
+```
+
+### 7. 加载状态使用 Skeleton
+```typescript
+{loading ? (
+    <Skeleton className="h-4 w-full" />
+) : (
+    // 实际内容
+)}
+```
+
+---
+
+## 完整数据流示例
+
+```
+1. 用户点击排序按钮
+   ↓
+2. handleSort('email') 被调用
+   ↓
+3. 更新 filter: { page: 1, size: 10, ordering: 'email' }
+   ↓
+4. useDebounceEffect 监听到 filter 变化（200ms 后）
+   ↓
+5. 调用 getData(filter)
+   ↓
+6. 将 filter 转换为 URL: ?page=1&size=10&ordering=email
+   ↓
+7. 发送后端请求
+   ↓
+8. 更新 payments 和 totalCount
+   ↓
+9. 表格重新渲染，排序图标变蓝
+```
+
+---
+
+## 常见问题
+
+### Q1: 为什么不使用 TanStack Table 的内置排序？
+**A:** 因为我们需要后端排序，TanStack Table 的内置排序是前端排序。使用 filter 驱动模式可以统一管理所有后端交互。
+
+### Q2: 如何添加新的筛选字段？
+**A:** 
+1. 在 `FilterType` 中添加字段
+2. 在列定义中添加筛选 UI
+3. 调用 `onFilterChange(field, value)`
+
+### Q3: 如何实现多字段排序？
+**A:** 将 `ordering` 改为数组：
+```typescript
+ordering?: string[]  // ['email', '-amount']
+```
+
+### Q4: 如何持久化 filter 到 URL？
+**A:** 使用 React Router 的 `useSearchParams`：
+```typescript
+const [searchParams, setSearchParams] = useSearchParams()
+
+// 同步 filter 到 URL
+useEffect(() => {
+    setSearchParams(new URLSearchParams(
+        Object.entries(filter).reduce((acc, [key, value]) => {
+            if (value) acc[key] = String(value)
+            return acc
+        }, {})
+    ))
+}, [filter])
+```
+
+---
+
+## 总结
+
+这种模式完美结合了 shadcn 的灵活性和 Ant Design 的数据驱动理念，提供了：
+
+- 🎯 清晰的数据流
+- 🔒 完整的类型安全
+- 🚀 优秀的性能（防抖）
+- 🛠️ 易于维护和扩展
+- 📊 符合 RESTful 规范
+
+适合需要后端分页、排序、筛选的复杂表格场景！

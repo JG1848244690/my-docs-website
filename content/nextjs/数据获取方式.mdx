@@ -1,0 +1,205 @@
+## Next.js 中 API 接口与三种数据获取方式
+
+在 App Router 模式中，接口统一写在：
+
+```
+app/api/xxx/route.ts
+```
+
+这里的 `route.ts` 就是后端接口处理器（相当于 Express/Nest/Spring 里的 Controller）。
+
+------
+
+##  基本示例：定义一个 `/api/posts` 接口
+
+文件结构：
+
+```
+app/
+ └── api/
+      └── posts/
+           └── route.ts
+```
+
+`route.ts` 写法：
+
+```ts
+// app/api/posts/route.ts
+import { NextResponse } from 'next/server'
+
+export async function GET() {
+  return NextResponse.json([
+    { id: 1, title: "Hello" },
+    { id: 2, title: "Next.js App Router" }
+  ])
+}
+```
+
+现在浏览器访问：
+
+```
+/api/posts
+```
+
+即可返回 JSON。
+
+------
+
+## 多种请求方法
+
+```ts
+export async function GET() { ... }
+export async function POST(request: Request) { ... }
+export async function PUT(request: Request) { ... }
+export async function DELETE(request: Request) { ... }
+```
+
+例如接收 POST 数据：
+
+```ts
+export async function POST(request: Request) {
+  const body = await request.json()
+  return NextResponse.json({ received: body })
+}
+```
+
+------
+
+## 动态路由（带参数）
+
+```
+app/api/posts/[id]/route.ts
+export async function GET(request: Request, { params }: { params: { id: string } }) {
+  return NextResponse.json({ id: params.id })
+}
+```
+
+访问：
+
+```
+/api/posts/123
+```
+
+## 三、方式一：服务器组件中获取数据
+
+服务器组件无需写 `"use client"`，SSR 自动进行。
+
+------
+
+## 用服务器组件获取接口数据（推荐）
+
+```tsx
+// app/page.tsx
+export default async function Page() {
+  const res = await fetch('http://localhost:3000/api/posts')
+  const posts = await res.json()
+
+  return (
+    <ul>
+      {posts.map(p => <li key={p.id}>{p.title}</li>)}
+    </ul>
+  )
+}
+```
+
+### ✔ 优点
+
+- 运行在服务器，不暴露数据
+- SEO 强
+- 性能最好
+
+## 方式二：客户端组件 useEffect 获取数据
+
+必须加：
+
+```tsx
+'use client'
+```
+
+```tsx
+'use client'
+import { useEffect, useState } from 'react'
+
+export default function Posts() {
+  const [posts, setPosts] = useState([])
+
+  useEffect(() => {
+    fetch('/api/posts')
+      .then((res) => res.json())
+      .then((data) => setPosts(data))
+  }, [])
+
+  return (
+    <ul>
+      {posts.map(p => <li key={p.id}>{p.title}</li>)}
+    </ul>
+  )
+}
+```
+
+### ✔ 优点
+
+- 可以使用 React Hooks
+- 可以绑定交互（点击、搜索等）
+
+### ❌ 缺点
+
+- SEO 差
+- 数据暴露在浏览器
+
+## 方式三：use() + Suspense 流式渲染（Next13+ 新写法）
+
+适合大数据量内容、需要边加载边渲染的场景。
+
+------
+
+## 父组件（服务器组件）
+
+```tsx
+import Posts from './Posts'
+import { Suspense } from 'react'
+
+export default function Page() {
+  const posts = fetch('/api/posts').then(r => r.json())
+
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Posts posts={posts} />
+    </Suspense>
+  )
+}
+```
+
+------
+
+## 子组件（客户端组件）
+
+```tsx
+'use client'
+import { use } from 'react'
+
+export default function Posts({ posts }) {
+  const data = use(posts) // 等待 Promise，自动 suspense
+
+  return (
+    <ul>
+      {data.map(p => <li key={p.id}>{p.title}</li>)}
+    </ul>
+  )
+}
+```
+
+###  原理
+
+- use() 会暂停渲染
+- Suspense 显示 Loading
+- 数据到达后自动恢复渲染
+
+## 三种方式对比
+
+| 方式                         | 环境            | 优点               | 缺点             | 场景               |
+| ---------------------------- | --------------- | ------------------ | ---------------- | ------------------ |
+| **服务器组件 fetch（推荐）** | 服务端          | 性能好，不暴露数据 | 不能用浏览器 API | 大部分数据加载     |
+| **useEffect（客户端）**      | 浏览器          | 支持交互、Hooks    | SEO 差，暴露数据 | 表单、按钮、搜索栏 |
+| **use() + Suspense**         | 服务端 + 客户端 | 流式渲染体验最好   | 需要理解新特性   | 大列表、feed、blog |
+

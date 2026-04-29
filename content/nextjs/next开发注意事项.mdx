@@ -1,0 +1,167 @@
+## 1. Image组件必须用next/image
+
+```tsx
+// ❌ 不推荐
+<img src="/logo.png" />
+
+// ✅ 推荐 - 自动优化
+import Image from 'next/image';
+<Image src="/logo.png" width={200} height={100} alt="logo" />
+
+```
+
+## 2. **Link 组件用 next/link**
+
+```tsx
+// ❌ 不要用 <a>
+<a href="/about">关于</a>
+
+// ✅ 用 Link - 客户端路由
+import Link from 'next/link';
+<Link href="/about">关于</Link>
+
+```
+
+## 3.**环境变量命名规则**
+
+```tsx
+# .env.local
+
+# 服务端可用（不会暴露给浏览器）
+DATABASE_URL=xxx
+API_SECRET=xxx
+
+# 客户端可用（会暴露给浏览器）
+NEXT_PUBLIC_API_URL=https://api.com
+
+```
+
+## 4.  **fetch 缓存策略**
+
+```tsx
+// 默认缓存（生产环境）
+fetch('https://api.com/data')
+
+// 不缓存，每次请求
+fetch('https://api.com/data', { cache: 'no-store' })
+
+// 缓存 60 秒
+fetch('https://api.com/data', { next: { revalidate: 60 } })
+
+```
+
+## 5. **不能在服务端组件使用的 API**
+
+```tsx
+// ❌ 服务端组件不能用
+localStorage
+sessionStorage
+window
+document
+useEffect, useState, useRouter...
+
+// ✅ 只能在客户端组件用
+'use client'
+
+```
+
+## 6.metadata只能在服务端组件
+
+```tsx
+// ✅ page.tsx - 服务端
+export const metadata = {
+  title: '商品列表',
+  description: '...'
+}
+
+// ❌ 客户端组件不能用 metadata
+'use client'
+export const metadata = { ... }  // 报错
+
+```
+
+## 7. 动态路由文件命名
+
+```tsx
+[id]        → 必填参数  /goods/123
+[...slug]   → 捕获所有  /blog/a/b/c
+[[...slug]] → 可选捕获  /blog 或 /blog/a/b
+
+```
+
+## 8. **loading.tsx 和 error.tsx**
+
+```tsx
+app/
+  └── goods/
+      ├── page.tsx       # 页面
+      ├── loading.tsx    # 加载状态（自动）
+      └── error.tsx      # 错误处理（自动）
+// loading.tsx
+export default function Loading() {
+    return <div>加载中...</div>
+}
+
+// error.tsx
+'use client'
+export default function Error({ error, reset }) {
+    return <button onClick={reset}>重试</button>
+}
+
+```
+
+## 9. **redirect 和 notFound**
+
+```tsx
+import { redirect, notFound } from 'next/navigation';
+
+export default async function Page({ params }) {
+    const { id } = await params;
+    
+    if (id === '0') {
+        redirect('/');  // 重定向
+    }
+    
+    const data = await fetchData(id);
+    if (!data) {
+        notFound();  // 显示 404
+    }
+    
+    return <div>{data.name}</div>
+}
+
+```
+
+## 10.api路由返回格式
+
+```tsx
+// app/api/xxx/route.ts
+import { NextResponse } from 'next/server';
+
+export async function GET() {
+    return NextResponse.json({ data: [] });  // ✅
+    // return Response.json({ data: [] });   // ✅ 也可以
+}
+
+```
+
+## 11.客户端组件可以导入服务端组件吗
+
+```tsx
+// ❌ 不能直接导入
+'use client'
+import ServerComponent from './server';  // 报错
+
+// ✅ 可以通过 children 传递
+'use client'
+export default function Client({ children }) {
+    return <div>{children}</div>
+}
+
+// page.tsx
+<Client>
+    <ServerComponent />  // ✅ 正确
+</Client>
+
+```
+

@@ -1,0 +1,242 @@
+# Zod 入门到实践：类型与校验的统一之道
+
+Zod 是一个“运行时数据校验库”，同时也是“类型生成器”。它用一份模式（schema）在运行时验证对象结构，并在编译时为 TypeScript 生成类型。用一句话概括：Zod 让“类型（TS）”和“校验（运行时）”成为同一份真源。
+
+## 为什么用 Zod
+
+- 类型与校验统一：用一份模式同时完成 TS 类型推导与运行时验证，不再“声明一个类型、写一堆 if 判断”各自维护。
+- 强健的运行时安全：TS 只在编译期保证类型，Zod 在运行时拦截脏数据（接口返回、表单输入、URL 参数、本地存储）。
+- 组合能力强：支持 `object`/`array`/`enum`/`union`/`literal`/`optional`/`nullable`/`transform`/`refine` 等。
+- 前后端通吃：前端表单、后端接口入口、BFF 校验、中间层数据清洗都适用。
+
+## 安装
+
+```bash
+npm install zod
+# 或 pnpm/yarn 安装
+```
+
+## 基本用法
+
+- 定义模式与类型推导
+```ts
+import { z } from 'zod'
+
+// 定义模式
+const TaskSchema = z.object({
+  name: z.string().min(1, '任务名称不能为空').max(30, '任务名称不能超过 30 个字符'),
+  description: z.string().max(200, '描述不能超过 200 字').optional(),
+  dueDate: z.string().optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
+})
+
+// 推导类型
+type TaskInput = z.infer<typeof TaskSchema>
+```
+
+- 两种校验方式
+```ts
+// 失败抛错（异常流）
+const data = TaskSchema.parse(form)
+
+// 安全校验（推荐）
+const parsed = TaskSchema.safeParse(form)
+if (!parsed.success) {
+  // parsed.error 是 ZodError
+  const message = parsed.error.errors[0]?.message ?? '校验失败'
+  // 自己决定如何提示用户（字段级、全局提示等）
+} else {
+  // parsed.data 是类型安全且运行时校验通过的数据
+}
+```
+
+## 组合与常用内置类型
+
+- `z.string().min(n).max(n).email().url()...`
+- `z.number().int().positive().gte(n).lte(n)...`
+- `z.boolean()`
+- `z.enum(['a','b','c'])`、`z.literal('a')`
+- `z.array(z.string()).min(1)`、`z.tuple([...])`
+- `z.union([A, B])`、`z.intersection(A, B)`
+- `z.record(z.string(), z.number())`
+- `z.object({ ... })`、`z.object({ ... }).partial()`（全部改可选）、`.required()`（全部必填）
+- `z.nullable(T)`（可为 null）、`z.optional(T)`（可为 undefined）
+
+示例：
+```ts
+const UserSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string().email(),
+  tags: z.array(z.string()).default([]),
+})
+type User = z.infer<typeof UserSchema>
+```
+
+## 自定义规则与跨字段校验
+
+- 单字段 refine
+```ts
+const PhoneSchema = z.string().refine(v => /^1\d{10}$/.test(v), '手机号格式不正确')
+```
+
+- 跨字段校验（`superRefine`）
+```ts
+const RangeSchema = z.object({ start: z.number(), end: z.number() })
+  .superRefine((val, ctx) => {
+    if (val.end < val.start) {
+      ctx.addIssue({
+        path: ['end'], // 指定错误归属字段
+        code: z.ZodIssueCode.custom,
+        message: '结束值必须大于开始值',
+      })
+    }
+  })
+```
+
+## 转换与预处理
+
+- `transform`：校验前后做映射（生成新的数据）
+```ts
+const TrimmedName = z.string().transform(s => s.trim())
+```
+
+- `preprocess`：在进入模式之前预处理原始输入
+```ts
+const DateStringToISO = z.preprocess(
+  (v) => typeof v === 'string' ? new Date(v).toISOString() : v,
+  z.string().datetime()
+)
+```
+
+## 结构工具：Pick/Omit/Merge
+
+```ts
+const Base = z.object({ a: z.string(), b: z.number(), c: z.boolean() })
+const OnlyA = Base.pick({ a: true })
+const WithoutB = Base.omit({ b: true })
+const Extended = Base.merge(z.object({ d: z.string() }))
+```
+
+## 错误处理与展示
+
+- `safeParse` 返回的 `ZodError` 结构化错误：
+  - `error.errors` 是数组，包含 `path`（字段路径）、`message`、`code`
+- 将错误映射成“字段 → 文案”的字典，便于字段级提示：
+```ts
+const parsed = TaskSchema.safeParse(form)
+if (!parsed.success) {
+  const fieldErrors = parsed.error.errors.reduce((acc, issue) => {
+    const key = issue.path.join('.') || '_root'
+    acc[key] = issue.message
+    return acc
+  }, {} as Record<string, string>)
+  // setFieldErrors(fieldErrors) 或 setError(...) 全局提示
+}
+```
+
+## 与 TypeScript 的结合
+
+- Zod 是“类型的实现”，`z.infer<typeof Schema>` 得到 TS 类型，前后端共享同一份规则。
+- 当 schema 变化时，类型自动更新，避免“类型与校验脱节”。
+
+## 用于表单校验（与 UI 配合）
+
+- 控件级轻量约束（如 `maxLength`）用于即时反馈；
+- 提交前用 Zod 做“最终把关”（统一规则、跨字段校验、转换）；
+- React Hook Form 可用 `zodResolver` 实现“Zod 作为唯一校验器”。
+
+示例（手动校验）：
+```ts
+const parsed = TaskSchema.safeParse(form)
+if (!parsed.success) {
+  setError(parsed.error.errors[0]?.message || '校验失败')
+  return
+}
+mutation.mutate({ id: taskId, data: parsed.data })
+```
+
+## 与 React Query/接口调用的关系
+
+- React Query 管理请求与缓存；Axios/Fetch 负责网络传输；Zod 在提交前/响应后做数据校验与清洗。
+- 推荐顺序：UI 输入 → Zod 校验 → React Query `mutate`（内部 axios/fetch）→ 成功后更新状态。
+
+```ts
+const mutation = useMutation({
+  mutationFn: async ({ id, data }: { id: string; data: TaskInput }) => {
+    // await axios.patch(`/tasks/${id}`, data)
+    await new Promise(res => setTimeout(res, 300)) // 模拟接口
+  },
+  onSuccess: () => { /* 更新状态、关闭抽屉等 */ }
+})
+
+const onSubmit = () => {
+  const parsed = TaskSchema.safeParse(form)
+  if (!parsed.success) {
+    setError(parsed.error.errors[0]?.message || '校验失败')
+    return
+  }
+  setError('')
+  mutation.mutate({ id: openTaskId, data: parsed.data })
+}
+```
+
+## 前后端通用（全栈用法）
+
+- 前端：表单提交、路由参数、本地存储、第三方 SDK 数据校验。
+- 后端：接口入参校验、配置文件解析、Webhooks 数据保护。
+- tRPC/BFF：用 Zod 定义契约，自动生成前端类型，极简对接。
+
+## 最佳实践
+
+- 将 Zod 作为数据边界的“唯一门神”：提交前统一校验与转换。
+- 模式集中管理：一个模块导出 schema 与 `z.infer` 类型，避免散落各处。
+- 错误语义化：明确错误信息（字段级/汇总），保证用户能修复。
+- 防御性编程：对接口返回也做 Zod 校验（容错与监控）。
+
+## 常见坑与建议
+
+- 只写 TS 类型不做运行时校验：会在生产上放过脏数据。
+- 规则分散在各个控件：后续维护困难，建议统一收敛到 Zod。
+- 忘记 `trim()`：表单文本常见边界，建议在 `transform/preprocess` 中清洗。
+- 复杂规则不落地：跨字段、时间区间、枚举关联用 `superRefine`。
+
+## 完整示例：任务表单
+
+```ts
+import { z } from 'zod'
+import { useMutation } from '@tanstack/react-query'
+
+const TaskSchema = z.object({
+  name: z.string().min(1, '任务名称不能为空').max(30, '任务名称不能超过 30 个字符').transform(s => s.trim()),
+  description: z.string().max(200, '描述不能超过 200 字').optional(),
+  dueDate: z.string().optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
+})
+type TaskInput = z.infer<typeof TaskSchema>
+
+const mutation = useMutation({
+  mutationFn: async ({ id, data }: { id: string; data: TaskInput }) => {
+    // await axios.patch(`/tasks/${id}`, data)
+    await new Promise(res => setTimeout(res, 300))
+  },
+})
+
+function onSubmit(form: unknown, setError: (msg: string) => void) {
+  const parsed = TaskSchema.safeParse(form)
+  if (!parsed.success) {
+    setError(parsed.error.errors[0]?.message ?? '校验失败')
+    return
+  }
+  setError('')
+  mutation.mutate({ id: 't-1', data: parsed.data })
+}
+```
+
+## 总结
+
+- Zod 是将“类型系统”与“运行时校验”统一起来的基础设施。它让前端/后端的数据边界变得明确且健壮。
+- 在现代前端里，最自然的流程是：控件轻量约束 → Zod 统一校验 → React Query 提交接口 → 成功后状态更新。
+- 一旦习惯用 Zod，你的表单与接口流程会更稳定、更易维护，也更利于类型驱动开发。
+
+如需我将此文档转成项目内的 Markdown 文件并放到指定位置，告诉我路径即可，我会为你生成并保存。
+

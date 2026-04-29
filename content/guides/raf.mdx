@@ -1,0 +1,553 @@
+# requestIdleCallback 与 requestAnimationFrame
+
+## 概述
+
+这两个 API 都是浏览器提供的用于优化性能的方法，但它们的执行时机和使用场景完全不同。
+
+---
+
+## requestAnimationFrame (rAF)
+
+### 定义
+
+在浏览器下次重绘之前执行回调函数，专门用于动画。
+
+### 执行时机
+
+```
+一帧的生命周期：
+┌─────────────────────────────────────────────────────┐
+│ 1. 输入事件处理 (Input Events)                        │
+│ 2. requestAnimationFrame 回调                        │
+│ 3. 解析 HTML (Parse HTML)                           │
+│ 4. 样式计算 (Recalc Styles)                         │
+│ 5. 布局 (Layout)                                    │
+│ 6. 绘制 (Paint)                                     │
+│ 7. 合成 (Composite)                                 │
+│ 8. requestIdleCallback 回调 (如果有空闲时间)          │
+└─────────────────────────────────────────────────────┘
+```
+
+**关键点：**
+- 在每一帧的**开始阶段**执行
+- 执行频率与屏幕刷新率一致（通常 60fps = 16.6ms/帧）
+- 高刷新率屏幕（120Hz、144Hz）会更频繁执行
+
+### 基础用法
+
+```javascript
+function animate() {
+  // 动画逻辑
+  element.style.transform = `translateX(${x}px)`;
+  
+  // 继续下一帧
+  requestAnimationFrame(animate);
+}
+
+// 启动动画
+requestAnimationFrame(animate);
+```
+
+### 取消动画
+
+```javascript
+const animationId = requestAnimationFrame(animate);
+
+// 取消动画
+cancelAnimationFrame(animationId);
+```
+
+---
+
+## requestIdleCallback (rIC)
+
+### 定义
+
+在浏览器空闲时期执行回调函数，用于执行低优先级任务。
+
+### 执行时机
+
+```
+帧结束后的空闲时间：
+┌─────────────────────────────────────────────────────┐
+│ 一帧 (16.6ms @ 60fps)                               │
+│ ├─ 必要工作 (10ms)                                   │
+│ │  ├─ JS 执行                                       │
+│ │  ├─ 样式计算                                       │
+│ │  ├─ 布局                                          │
+│ │  └─ 绘制                                          │
+│ └─ 空闲时间 (6.6ms) ← requestIdleCallback 执行      │
+└─────────────────────────────────────────────────────┘
+```
+
+**关键点：**
+- 在每一帧的**结束阶段**执行（如果有剩余时间）
+- 不会阻塞关键渲染路径
+- 适合执行非紧急任务
+
+### 基础用法
+
+```javascript
+requestIdleCallback((deadline) => {
+  // deadline.timeRemaining() 返回当前帧剩余时间（毫秒）
+  console.log(`剩余时间: ${deadline.timeRemaining()}ms`);
+  
+  // deadline.didTimeout 表示是否超时
+  if (deadline.didTimeout) {
+    console.log('任务超时，强制执行');
+  }
+  
+  // 执行低优先级任务
+  while (deadline.timeRemaining() > 0 && tasks.length > 0) {
+    const task = tasks.shift();
+    task();
+  }
+});
+```
+
+### 设置超时时间
+
+```javascript
+// 最多等待 2 秒，超时后强制执行
+requestIdleCallback((deadline) => {
+  console.log('执行任务');
+}, { timeout: 2000 });
+```
+
+### 取消回调
+
+```javascript
+const idleId = requestIdleCallback(callback);
+
+// 取消
+cancelIdleCallback(idleId);
+```
+
+---
+
+## 对比总结
+
+| 特性 | requestAnimationFrame | requestIdleCallback |
+|------|----------------------|---------------------|
+| 执行时机 | 每帧开始前 | 每帧结束后的空闲时间 |
+| 执行频率 | 固定（60fps ≈ 16.6ms） | 不固定（取决于空闲时间） |
+| 优先级 | 高（影响渲染） | 低（不影响渲染） |
+| 适用场景 | 动画、视觉更新 | 数据分析、日志上报 |
+| 浏览器支持 |  全面支持 |  Safari 不支持 |
+
+---
+
+## 使用场景
+
+### requestAnimationFrame 适用场景
+
+1. **动画效果**
+```javascript
+let start = null;
+function step(timestamp) {
+  if (!start) start = timestamp;
+  const progress = timestamp - start;
+  
+  element.style.transform = `translateX(${Math.min(progress / 10, 200)}px)`;
+  
+  if (progress < 2000) {
+    requestAnimationFrame(step);
+  }
+}
+requestAnimationFrame(step);
+```
+
+2. **滚动监听优化**
+```javascript
+let ticking = false;
+
+window.addEventListener('scroll', () => {
+  if (!ticking) {
+    requestAnimationFrame(() => {
+      // 处理滚动逻辑
+      updateScrollPosition();
+      ticking = false;
+    });
+    ticking = true;
+  }
+});
+```
+
+3. **Canvas 绘制**
+```javascript
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // 绘制逻辑
+  ctx.fillRect(x, y, 50, 50);
+  
+  requestAnimationFrame(draw);
+}
+```
+
+### requestIdleCallback 适用场景
+
+1. **数据上报**
+```javascript
+const logs = [];
+
+function sendLogs() {
+  requestIdleCallback((deadline) => {
+    while (deadline.timeRemaining() > 0 && logs.length > 0) {
+      const log = logs.shift();
+      navigator.sendBeacon('/api/log', JSON.stringify(log));
+    }
+    
+    if (logs.length > 0) {
+      sendLogs(); // 继续发送剩余日志
+    }
+  });
+}
+```
+
+2. **预加载资源**
+```javascript
+const imagesToPreload = ['img1.jpg', 'img2.jpg', 'img3.jpg'];
+
+function preloadImages() {
+  requestIdleCallback((deadline) => {
+    while (deadline.timeRemaining() > 0 && imagesToPreload.length > 0) {
+      const src = imagesToPreload.shift();
+      const img = new Image();
+      img.src = src;
+    }
+    
+    if (imagesToPreload.length > 0) {
+      preloadImages();
+    }
+  });
+}
+```
+
+3. **大数据处理**
+```javascript
+function processLargeData(data) {
+  const chunks = chunkArray(data, 100); // 分块
+  
+  function processChunk() {
+    requestIdleCallback((deadline) => {
+      while (deadline.timeRemaining() > 0 && chunks.length > 0) {
+        const chunk = chunks.shift();
+        chunk.forEach(item => {
+          // 处理数据
+          processItem(item);
+        });
+      }
+      
+      if (chunks.length > 0) {
+        processChunk();
+      }
+    });
+  }
+  
+  processChunk();
+}
+```
+
+---
+
+## 实战案例：使用 rAF 实现分辨率适配动画
+
+### 问题背景
+
+不同设备的屏幕刷新率不同：
+- 普通屏幕：60Hz (16.6ms/帧)
+- 高刷屏幕：120Hz (8.3ms/帧)、144Hz (6.9ms/帧)
+
+使用 `setInterval` 或 `setTimeout` 无法自动适配，可能导致动画卡顿或不流畅。
+
+### 解决方案：基于时间的动画
+
+```javascript
+class SmoothAnimation {
+  constructor(element, duration = 1000) {
+    this.element = element;
+    this.duration = duration; // 动画总时长（毫秒）
+    this.startTime = null;
+    this.animationId = null;
+  }
+  
+  // 缓动函数（easeInOutQuad）
+  easing(t) {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  }
+  
+  // 动画循环
+  animate(timestamp) {
+    if (!this.startTime) this.startTime = timestamp;
+    
+    // 计算进度（0 到 1）
+    const elapsed = timestamp - this.startTime;
+    const progress = Math.min(elapsed / this.duration, 1);
+    
+    // 应用缓动函数
+    const easedProgress = this.easing(progress);
+    
+    // 更新元素位置（0 到 300px）
+    const x = easedProgress * 300;
+    this.element.style.transform = `translateX(${x}px)`;
+    
+    // 继续动画或结束
+    if (progress < 1) {
+      this.animationId = requestAnimationFrame((t) => this.animate(t));
+    } else {
+      this.onComplete();
+    }
+  }
+  
+  // 启动动画
+  start() {
+    this.startTime = null;
+    this.animationId = requestAnimationFrame((t) => this.animate(t));
+  }
+  
+  // 停止动画
+  stop() {
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+  }
+  
+  // 完成回调
+  onComplete() {
+    console.log('动画完成');
+  }
+}
+
+// 使用
+const box = document.querySelector('.box');
+const animation = new SmoothAnimation(box, 2000);
+animation.start();
+```
+
+### 完整示例：多属性动画
+
+```javascript
+class MultiPropertyAnimation {
+  constructor(element, config) {
+    this.element = element;
+    this.config = config; // { x: 300, y: 200, scale: 1.5, rotate: 360, duration: 1000 }
+    this.startTime = null;
+    this.animationId = null;
+  }
+  
+  // 多种缓动函数
+  easings = {
+    linear: t => t,
+    easeInQuad: t => t * t,
+    easeOutQuad: t => t * (2 - t),
+    easeInOutQuad: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+    easeInCubic: t => t * t * t,
+    easeOutCubic: t => (--t) * t * t + 1,
+  };
+  
+  animate(timestamp) {
+    if (!this.startTime) this.startTime = timestamp;
+    
+    const elapsed = timestamp - this.startTime;
+    const progress = Math.min(elapsed / this.config.duration, 1);
+    const easing = this.easings[this.config.easing || 'easeInOutQuad'];
+    const easedProgress = easing(progress);
+    
+    // 计算各属性当前值
+    const x = (this.config.x || 0) * easedProgress;
+    const y = (this.config.y || 0) * easedProgress;
+    const scale = 1 + ((this.config.scale || 1) - 1) * easedProgress;
+    const rotate = (this.config.rotate || 0) * easedProgress;
+    const opacity = this.config.opacity !== undefined 
+      ? 1 + (this.config.opacity - 1) * easedProgress 
+      : 1;
+    
+    // 应用变换
+    this.element.style.transform = `
+      translateX(${x}px) 
+      translateY(${y}px) 
+      scale(${scale}) 
+      rotate(${rotate}deg)
+    `;
+    this.element.style.opacity = opacity;
+    
+    if (progress < 1) {
+      this.animationId = requestAnimationFrame((t) => this.animate(t));
+    } else {
+      this.config.onComplete?.();
+    }
+  }
+  
+  start() {
+    this.startTime = null;
+    this.animationId = requestAnimationFrame((t) => this.animate(t));
+    return this;
+  }
+  
+  stop() {
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+    }
+    return this;
+  }
+}
+
+// 使用示例
+const box = document.querySelector('.box');
+
+new MultiPropertyAnimation(box, {
+  x: 300,
+  y: 100,
+  scale: 1.5,
+  rotate: 360,
+  opacity: 0.5,
+  duration: 2000,
+  easing: 'easeInOutQuad',
+  onComplete: () => console.log('动画完成')
+}).start();
+```
+
+### 性能监控版本
+
+```javascript
+class PerformanceAnimation {
+  constructor(element, config) {
+    this.element = element;
+    this.config = config;
+    this.startTime = null;
+    this.frameCount = 0;
+    this.fps = 0;
+    this.lastFrameTime = null;
+  }
+  
+  animate(timestamp) {
+    if (!this.startTime) {
+      this.startTime = timestamp;
+      this.lastFrameTime = timestamp;
+    }
+    
+    // 计算 FPS
+    this.frameCount++;
+    const deltaTime = timestamp - this.lastFrameTime;
+    this.fps = Math.round(1000 / deltaTime);
+    this.lastFrameTime = timestamp;
+    
+    // 动画逻辑
+    const elapsed = timestamp - this.startTime;
+    const progress = Math.min(elapsed / this.config.duration, 1);
+    const x = progress * 300;
+    
+    this.element.style.transform = `translateX(${x}px)`;
+    
+    // 显示性能信息
+    console.log(`FPS: ${this.fps}, 帧数: ${this.frameCount}`);
+    
+    if (progress < 1) {
+      requestAnimationFrame((t) => this.animate(t));
+    } else {
+      console.log(`动画完成，平均帧率: ${Math.round(this.frameCount / (elapsed / 1000))} fps`);
+    }
+  }
+  
+  start() {
+    requestAnimationFrame((t) => this.animate(t));
+  }
+}
+```
+
+### 为什么这样能适配不同刷新率？
+
+```javascript
+// ❌ 固定时间间隔（无法适配）
+setInterval(() => {
+  x += 5; // 每次移动固定距离
+  element.style.transform = `translateX(${x}px)`;
+}, 16); // 假设 60fps
+
+// 问题：
+// - 60Hz 屏幕：正常
+// - 120Hz 屏幕：动画速度翻倍（因为执行频率更高）
+// - 低性能设备：可能卡顿
+
+//  基于时间的动画（自动适配）
+function animate(timestamp) {
+  const progress = (timestamp - startTime) / duration;
+  const x = progress * 300; // 基于时间进度计算位置
+  element.style.transform = `translateX(${x}px)`;
+  
+  if (progress < 1) {
+    requestAnimationFrame(animate);
+  }
+}
+
+// 优势：
+// - 60Hz 屏幕：每帧移动 5px (300px / 60帧)
+// - 120Hz 屏幕：每帧移动 2.5px (300px / 120帧)
+// - 总时长相同，视觉效果一致
+```
+
+---
+
+## 兼容性处理
+
+### requestAnimationFrame Polyfill
+
+```javascript
+if (!window.requestAnimationFrame) {
+  window.requestAnimationFrame = (callback) => {
+    return setTimeout(() => {
+      callback(Date.now());
+    }, 1000 / 60);
+  };
+  
+  window.cancelAnimationFrame = (id) => {
+    clearTimeout(id);
+  };
+}
+```
+
+### requestIdleCallback Polyfill
+
+```javascript
+if (!window.requestIdleCallback) {
+  window.requestIdleCallback = (callback, options) => {
+    const start = Date.now();
+    return setTimeout(() => {
+      callback({
+        didTimeout: false,
+        timeRemaining: () => Math.max(0, 50 - (Date.now() - start))
+      });
+    }, 1);
+  };
+  
+  window.cancelIdleCallback = (id) => {
+    clearTimeout(id);
+  };
+}
+```
+
+---
+
+## 最佳实践
+
+1. **动画使用 rAF**
+   - 所有视觉更新都应该在 rAF 中进行
+   - 基于时间而非帧数计算动画进度
+
+2. **低优先级任务使用 rIC**
+   - 数据上报、日志记录
+   - 预加载非关键资源
+   - 大数据处理
+
+3. **避免在回调中执行耗时操作**
+   - rAF 回调应该尽快完成（< 16ms）
+   - rIC 回调应该检查 `timeRemaining()`
+
+4. **合理使用 transform**
+   - 优先使用 `transform` 和 `opacity`
+   - 避免触发重排的属性（width、height、left、top）
+
+5. **性能监控**
+   - 使用 Performance API 监控帧率
+   - 使用 Chrome DevTools 的 Performance 面板分析

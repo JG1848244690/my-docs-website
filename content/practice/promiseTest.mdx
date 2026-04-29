@@ -1,0 +1,231 @@
+1. 输出是什么
+
+```javascript
+Promise.resolve().then(() => {
+  console.log(1);
+
+  Promise.resolve().then(() => {
+    console.log(2);
+  });
+
+}).then(() => {
+  console.log(3);
+});
+
+console.log(4);
+```
+
+2. 输出是什么
+
+```javascript
+console.log('x');
+
+setTimeout(() => {
+  console.log('y');
+  Promise.resolve().then(() => {
+    console.log('z');
+  });
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log('p');
+});
+
+console.log('q');
+
+```
+
+3. 输出是什么
+
+```javascript
+console.log(1);
+
+setTimeout(() => {
+  console.log(2);
+
+  Promise.resolve().then(() => {
+    console.log(3);
+  });
+
+}, 0);
+
+Promise.resolve().then(() => {
+  console.log(4);
+
+  setTimeout(() => {
+    console.log(5);
+  }, 0);
+});
+
+setTimeout(() => {
+  console.log(6);
+}, 0);
+
+console.log(7);
+
+```
+
+4.输出是什么
+
+```javascript
+async function test() {
+  console.log(1);
+
+  await Promise.resolve();
+  console.log(2);
+
+  setTimeout(() => {
+    console.log(3);
+  }, 0);
+
+  await 4;
+  console.log(5);
+}
+
+console.log(6);
+
+test();
+
+Promise.resolve().then(() => {
+  console.log(7);
+});
+
+setTimeout(() => {
+  console.log(8);
+}, 0);
+
+console.log(9);
+
+```
+
+5. 输出是什么
+
+```javascript
+        async function fn() {
+            //创建一个promise
+            console.log('start');
+            let isSuccess = await new Promise((res, rej) => {
+                console.log('3');
+                // 异步操作
+                setTimeout(() => {
+                    console.log("定时器完成")
+                    res(1)
+                }, 0)
+            })
+            console.log('end');
+            // console.log(isSuccess);
+        }
+        console.log(1);
+        fn()
+        console.log(2);
+```
+
+这里的执行顺序是 1 start 
+
+然后await执行 new Promise
+
+new Promise 的执行器同步执行 → **打印 3**
+
+执行器内的 `setTimeout` 注册一个宏任务（0ms）
+
+async 函数在 await 处 **暂停**，剩余代码保存起来（不会加入微任务队列，等待 Promise resolve）
+
+也就是说 await会等待后面的promise完成之后再将后续代码放入微任务队列 现在暂时跳出async函数
+
+打印2
+
+然后宏任务队列定时器完成 打印定时器完成
+
+➡ 使 Promise resolved
+➡ 触发 await 的恢复逻辑
+
+然后await检测到promise完成 将后续代码放入微任务队列 
+
+也就是执行end
+
+6. 输出是什么
+
+```javascript
+//如果await后是new Promise 先执行里面同步代码 然后暂停
+//如果是Promise.resolve().then()就把then放到微任务队尾 然后暂停
+//如果是Promise.resolve(0) 则直接把await下面的代码包装成微任务放入队尾
+async function task1() {
+  console.log('A');
+
+  await Promise.resolve().then(() => {
+    console.log('B');
+  });
+
+  console.log('C');
+
+  await 0;
+
+  console.log('D');
+}
+
+async function task2() {
+  console.log('E');
+
+  await task1();
+
+  console.log('F');
+}
+
+console.log('G');
+
+task2();
+
+Promise.resolve().then(() => {
+  console.log('H');
+}).then(() => {
+  console.log('I');
+});
+
+console.log('J');
+
+
+//g e  a j b h c     i d f
+```
+
+7. 输出是什么
+
+```javascript
+async function alpha() {
+    console.log('A');
+
+    await Promise.resolve().then(() => {
+        console.log('B');
+    });
+
+    console.log('C');
+
+    await 0;
+
+    console.log('D');
+}
+
+async function beta() {
+    console.log('E');
+
+    await alpha();
+
+    console.log('F');
+
+    await Promise.resolve();
+
+    console.log('G');
+}
+
+console.log('H');
+
+beta();
+
+Promise.resolve().then(() => {
+    console.log('I');
+}).then(() => {
+    console.log('J');
+});
+
+console.log('K');
+```
+

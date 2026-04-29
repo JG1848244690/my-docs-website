@@ -1,0 +1,191 @@
+## webpack入门
+
+## 八大选项
+
+1. entry：必填项，以那个文件为开始
+2. module：非必须 loader编写的地方
+3. output：必须项 最终产出js配置
+4. plugins：非必须 插件
+5. mode：webpack4以后必填
+6. optimization：非必填 优化相关
+7. devServer：非必须 开发模式配置
+8. resolve：非必须 提供一些简化功能
+
+## 常用配置
+
+```js
+// commonjs
+// 引入eslint
+const eslintplugin = require('eslint-webpack-plugin');
+// 引入minicss
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
+const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+module.exports = {
+    mode: 'development',//none development production
+    target: ['web', 'es5'], // 让 webpack 生成 ES5 代码
+    // sourcemap 用来映射源代码和打包后的代码
+    devtool: 'eval-cheap-source-map',// 源码映射 方便调试
+
+    // 优化相关-代码分割
+    // 单入口=》 runtime+vendor+核心业务+后续加载的异步模块
+    // 多入口=》 runtime+vendor+每个入口的核心业务+common
+    // 如果是多入口 如果多个入口共同引入了同一个js文件 那么这个js就会被重复请求
+    // 这时可以配置splitChunks来将这个js独立打包出来 然后通过浏览器的缓存机制 就可以避免重复请求
+    optimization: {
+        splitChunks: {
+            cacheGroups: {
+                // 这里是为了将第三方依赖打包成一个文件 避免和业务代码打包在一起
+                vendors: {
+                    test: /[\\/]node_modules[\\/]/,
+                    filename: "vendor.js",
+                    chunks: "all",
+                    minChunks: 1,
+                },
+                // 这里是为了将业务代码打包成一个文件 避免和第三方依赖打包在一起
+                default: {
+                    chunks: 'all',// all async initial 分别代表全部 异步 初始
+                    minSize: 0,// 最小大小 这里为了测试 改为0 表示只要引用就打包
+                    minChunks: 2,// 最小引用次数 这里为了测试 改为2 表示只要引用2次就打包
+                    filename: "common.js",
+
+                }
+            }
+
+        },
+        runtimeChunk: {
+            name: "runtime",
+
+        }
+    },
+    // entry:'./app.js',
+    entry: {
+        app: './app.js',
+        app2: './app2.js'
+    },
+    output: {
+        path: __dirname + '/dist',
+        filename: '[name].[chunkhash:4].bundle.js',
+        // 如果将打包出来的js css放到了cdn上 就需要加上url前缀
+        // publicPath: 'https://cdn.example.com/'
+    },
+    devServer: {
+        port:2000,
+        hot:true,
+        proxy:{
+            '/api':{
+                target:'http://localhost:3000',
+                changeOrigin:true,
+                pathRewrite:{
+                    '^/api':''
+                }
+            }
+        }
+    },
+    resolve: {
+        // 路径别名
+        alias: {
+            "@": path.resolve(__dirname, 'src'),
+        },
+        // 省略后缀
+        extensions: ['.js', '.ts', '.tsx', '.css', '.less'],
+    },
+    //loader
+    module: {
+        rules: [
+            {
+                test: /\.tsx?$/,
+                use: {
+                    loader: 'ts-loader',
+                    options: {
+
+                    }
+                },
+                // exclude: /node_modules/
+            },
+            {
+                test: /\.js$/,//定义loader需要去处理哪种类型的东西
+                use: {
+                    loader: 'babel-loader',
+                    options: {
+                        //可以写在根目录下的.babelrc中
+                    }
+                }
+            },
+            {
+                test: /\.css$/,
+                use: [MiniCssExtractPlugin.loader, 'css-loader', './mycss-loader']
+            },
+            {
+                test: /\.less$/,
+                use: [MiniCssExtractPlugin.loader, 'css-loader', 'less-loader']
+            },
+            {
+                test: /\.(png|jpe?g|gif|svg)$/i,
+                // type: 'asset/inline'  // 强制所有图片转 base64
+                type: 'asset/resource',  // 将图片转换为文件，并输出到指定目录
+                parser: {
+                    dataUrlCondition: {
+                        maxSize: 8 * 1024  // 小于 8kb 转 base64
+                    }
+                },
+                generator: {
+                    filename: 'images/[name].[chunkhash:4][ext]'
+                }
+            }
+        ]
+    },
+    plugins: [
+        // new eslintplugin()
+        new MiniCssExtractPlugin({
+            filename: './css/[name].[chunkhash:4].css'
+        }),
+        new CssMinimizerPlugin(),
+        new HtmlWebpackPlugin({
+            template: './index.html',
+            filename: 'index.html',
+            chunks: ['app'],
+            inject: 'body',//js注入位置
+            minify: {
+                removeComments: true,
+            }
+        })
+
+    ]
+}
+```
+
+
+
+## 代码分割
+
+对于单入口文件 spa 为了避免将所有js打包成一个文件 首屏加载过慢
+
+将又大首屏又用不到的js文件异步加载 打包后就会将这个文件独立打包成一个chunk 
+
+## chunkhash
+
+在打包文件名加了hash后 如果某一个文件发生了代码更改 重新打包之后所有的文件hash都会变 都会重新加载
+
+理想情况下是只想发生更改的文件hash值变化 其他不变 
+
+这时就需要用到chunkhash
+
+``  filename: '[name].[chunkhash:4].bundle.js'``
+
+## resolve
+
+1. alias-别名，提供路径的简写
+2. extensions-扩展省略，定义可省略的扩展后缀
+
+## dll优化
+
+webpack打包慢 优化可以用webpack插件dll 将第三方库等不改变的文件预打包 就能显著提升打包速度
+
+## 压缩 混淆 treeshaking
+
+压缩为最简单能实现的方式 混淆定义 
+
+如果一个包一百个方法只用了一个 shaking掉没用的方法

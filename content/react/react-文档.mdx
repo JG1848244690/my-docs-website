@@ -1,0 +1,491 @@
+## UI=f（state）
+
+这个公式是react声明式编程的核心
+
+它意味着UI是状态的纯函数映射
+
+## 虚拟dom
+
+* 核心工作流：
+
+当组件状态发生变化时 react会启动Reconciliation（协调）过程 其核心就是diff算法
+
+1. 触发更新：调用setState或者props变更 react知道需要更新
+2. 创建新树：根据最新状态 在内存中创建一颗新的虚拟dom树
+3. 差异化比较： 将新树与旧树进行diff
+4. 计算最小变更：diff算法找出两棵树之间的最小差异
+5. 批量更新真实dom：将所有差异打包 一次性 有针对性地应用到真实dom上
+
+* 最核心的优势
+
+1. 避免不必要的DOM操作，只更新变化的部分
+2. 合并多次变更为一次 有效减少浏览器的重排和重绘次数
+3. 保证流畅性 即使在数据频繁更新的复杂场景中 也能保持良好的响应速度
+
+## 高阶组件 hooks
+
+HOC高阶组件使用技巧
+
+
+
+```js
+function(conponentA){
+    return componentB
+}
+纯函数 没有副作用
+```
+
+1. 抽离重复的代码 实现组件的复用
+2. 条件渲染 渲染拦截
+3. 拦截 组件的生命周期
+
+---
+
+
+
+* 属性代理
+
+```jsx
+function HOC(WrappedComponent){
+    const newProps = {type:'hoc'}
+    return props => <WrappedComponent {...props} {...newProps}/>
+}
+```
+
+* 条件判断
+
+```jsx
+function HOC(WrappedComponent){
+    return props =>{
+        props.isShow? WrappedComponent : <p>empty</p>
+    }
+}
+```
+
+* 反向继承
+
+```jsx
+const HOC = (WrapperComponent)=>{
+    return class extends WrapperComponent{
+        render(){
+            return super.render()
+        }
+    }
+}
+```
+
+
+
+## jsx  虚拟dom以及react编译原理
+
+在 React 里渲染一个组件/元素，大体可以分三层：
+
+1. **JSX**（语法糖）
+2. **虚拟 DOM 对象（JS 对象）**
+3. **真实 DOM（浏览器 DOM）**
+
+流程是：
+
+JSX → React.createElement → 虚拟 DOM 对象 → ReactDOM.render → 真实 DOM
+
+* jsx到虚拟dom的转化
+
+JSX 不是浏览器能识别的原生语法，比如：
+
+```jsx
+const element = <div className="box">Hello</div>;
+```
+
+编译后会变成：
+
+```js
+const element = React.createElement(
+  "div",
+  { className: "box" },
+  "Hello"
+);
+```
+
+**这里就用到了 `React.createElement`**
+
+它的核心作用是：
+
+> **把 JSX 转换成一个虚拟 DOM 对象（JS 对象）**
+
+- 返回值不是 DOM 节点
+- 是一个普通对象，形如：
+
+```
+{
+  type: 'div',               // HTML 标签或组件
+  props: { className: 'box', children: 'Hello' },
+  key: null
+}
+```
+
+- 这个对象就叫 **虚拟 DOM**
+- 后续 React 会根据这个对象来更新真实 DOM
+
+**统一表示元素**
+
+- 不管是 HTML 标签还是组件
+- 都用同一个 JS 对象格式表示
+
+**便于 Diff**
+
+- React 后续 diff 对象，决定哪些 DOM 更新
+- 不用每次直接操作真实 DOM，提升性能
+
+**支持递归嵌套**
+
+- children 可以是数组或者其他虚拟 DOM 对象
+- React 可以统一管理整个树结构
+
+`ReactDOM.render` 或 `React 18` 的 `createRoot` 才会：
+
+1. 拿到 `React.createElement` 返回的对象
+2. 遍历虚拟 DOM 树
+3. 调用浏览器 API（`document.createElement`）生成真实 DOM
+4. 挂载到页面上
+
+---
+
+
+
+* **总流程**
+
+```jsx
+// JSX
+<div className="box">Hello</div>
+```
+
+编译后：
+
+```jsx
+React.createElement("div", { className: "box" }, "Hello");
+```
+
+返回对象：
+
+```
+{
+  type: 'div',
+  props: { className: 'box', children: 'Hello' },
+  key: null
+}
+```
+
+ReactDOM.render：
+
+- 遍历对象
+- 创建真实 DOM
+- 插入页面
+
+---
+
+## 手写creatElement
+
+```js
+function createElement(type,props,...children){
+    //核心逻辑不复杂 讲参数都塞到一个对象上返回就行
+    //children也要放到props里 这样在组建里就能通过this.props.children拿到子元素
+    return {
+        type,
+        props:{
+            ...props,
+            children
+        },
+         key: null                // 用于 diff
+    }
+}
+```
+
+## 手写render（）
+
+```js
+ReactDOM.render(<APP/>,document.getElementById('root'))
+
+function render(vDom,container){
+    let dom;
+    //检查当前节点是文本还是对象
+	if(typeof vDom!=='object'){
+		dom = document.createTextNode(vDom)
+    }else{
+        dom = document.createElement(vDom.type);//<p>
+    }
+    
+    //将vDom上除了children外的属性都挂载到真正的dom上去
+    if(vDom.props){
+        Object.keys(vDom.props)
+        .filter(key=>key!='children')
+        .forEach(item=>{
+            dom[item] = vDom.props[item];
+        })
+    }
+    
+    //如果还有子元素 递归调用
+    if(vDom.props&& vDom.props.children&&vDom.props.children.length){
+        vDom.props.children.forEach(child=>render(child,dom))
+    }
+    container.appendChild(dom)
+}
+```
+
+## Fiber是什么 --为什么需要Fiber
+
+避免大组件树阻塞浏览器
+
+支持用户交互实时响应
+
+为后续异步渲染（Concurrent Mode）打基础
+
+1. **问题出在哪里**
+
+React 16 以前，更新是 **同步的**：
+
+```jsx
+function App() {
+  return (
+    <div>
+      <BigList />
+      <Input />
+    </div>
+  );
+}
+```
+
+- 假设 `BigList` 组件渲染上千个子节点
+- React 会一次性递归整个树生成虚拟 DOM
+- 浏览器在这期间完全被阻塞
+- 用户在输入框输入字符就会卡顿
+
+**这就是同步渲染的问题**。
+
+2. **Fiber 的作用**
+
+拆分任务（Unit of Work）
+
+- React 会把组件树拆成 **Fiber 节点**，每个节点对应一个组件或 DOM 元素
+- 更新变成一个 **一个个小任务**，而不是一次性跑完
+
+```
+App Fiber
+ ├─ BigList Fiber
+ │    ├─ Item1 Fiber
+ │    ├─ Item2 Fiber
+ │    ...
+ └─ Input Fiber
+```
+
+- 每个 Fiber 都有 `next` 指针指向下一个 Fiber
+- React 执行时可以做 **增量渲染**
+- 浏览器可以在两次 Fiber 执行间处理用户交互
+
+可中断渲染
+
+- 当浏览器有高优先级任务（比如用户输入、动画）时
+- React 可以暂停渲染 `BigList` 的 Fiber，先更新 `Input`
+
+> **结果：输入框不卡顿，页面响应流畅**
+
+副作用标记（Effect Tag）
+
+- 每个 Fiber 有一个 **effectTag**：
+  - `Placement` → 新增节点
+  - `Update` → 更新节点
+  - `Deletion` → 删除节点
+- React 可以把所有变化 **收集起来再统一更新 DOM**，避免多次操作 DOM 提升性能
+
+- 以前：**一次性搬运一整车砖块** → 房子盖不完就卡住
+- Fiber：**一块一块搬砖**，搬一块就让你呼吸一次 → UI 可以保持响应
+
+总结
+
+- **Fiber 是虚拟 DOM 的升级版**，它：
+  1. 拆分任务 → 支持增量渲染
+  2. 标记副作用 → 精准更新 DOM
+  3. 支持优先级 → 高优先级任务可以先执行
+  4. 支持异步 / 可中断渲染 → 避免 UI 卡顿
+
+## 什么是合成事件-与原生事件的区别
+
+* 合成事件的特点
+
+1. 跨浏览器一致性：不同浏览器对事件的实现和处理方式各不相同 react封装了这些差异 使得在所有浏览器中 事件的行为是一致的。通过合成事件，react减少了因浏览器差异引起的问题
+2. 事件池化：react在合成事件对象的实现中采用了事件池化的策略 这意味着当事件处理完成后 react会将事件对象重新放入池中 而不是保留每个事件的实例 从而减少内存开销 事件池化的实现意味着**事件对象的属性值只能在事件对象回调函数中访问** 而在回调执行后 属性会被清空
+3. 统一的接口：合成事件封装了标准的原生事件接口 并提供了一致的API来访问事件的属性，如 event.target、event.stopPropagation()、event.preventDefault()等
+
+区别：
+
+1. 浏览器的兼容性
+2. 事件池机制
+3. 性能优化考虑
+4. 事件委托
+
+## suspense use
+
+## react的严格模式解决了哪些潜在问题
+
+1. 过时的生命周期方法
+
+2. 副作用的检查
+
+   react的严格模式会在渲染过程中启用双重渲染 这意味着组件的渲染和副作用函数会被执行两次 以帮助开发者识别副作用问题 在生产环境中 react只会渲染一次 但在严格模式下 react会主动触发两次渲染来确保副作用函数是纯粹的 不会影响后续的渲染过程
+
+3. findDOMNode 推荐用ref来获取domnode
+
+4. 异步渲染问题
+
+5. 不稳定的context
+
+
+
+## 函数式组件闭包问题
+
+1. **闭包本身没问题**，只是函数捕获创建时的变量。
+
+2. **会出 bug 的条件**：
+
+   - effect 内有“未来才执行的回调”（定时器、事件、Promise.then 等）
+   - 回调用到可能变化的 state/props
+   - effect 没有把这些变量写入依赖数组
+
+3. **安全场景**：
+
+   - effect 内同步读取 state/props
+   - state/props 不会变化或你不关心更新
+   - 依赖数组可控（空也行）
+
+4. **判断口诀**：
+
+   > “回调会未来执行且用到会变的值，依赖没加，就有闭包 bug。”
+
+说人话就是 状态变化之后 因为useEffect没加回调函数中的依赖 所以useEffect没重新执行 但是函数组件重新render了 状态已经变化了但是因为useEffect没重新执行导致闭包捕获到的还是旧的状态 会出现非预期的bug
+
+
+
+## 函数式组件和类组件的区别
+
+| 维度          | 类组件                                                       | 函数组件（Hooks）                                            |
+| ------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| **状态存储**  | 存在组件实例上，通过 `this.state` 管理                       | 每次 render 独立，状态通过 `useState`/`useReducer` hook 内部管理，形成闭包捕获 |
+| **更新方式**  | `this.setState()`，会合并更新                                | `setState` 函数，完全替换状态，需要自己合并对象              |
+| **生命周期**  | 明确生命周期方法（componentDidMount、componentDidUpdate、componentWillUnmount 等） | 通过 `useEffect`、`useLayoutEffect` 实现生命周期逻辑，统一处理副作用 |
+| **this 指向** | 必须注意 `this` 指向                                         | 没有 `this`，闭包捕获当前 render 的状态，避免 this 混乱      |
+| **逻辑组织**  | 状态和副作用分散在生命周期方法里                             | hook 内聚逻辑，把状态、事件、副作用都聚在同一地方，更清晰    |
+| **复用逻辑**  | 高阶组件 HOC / Render Props                                  | 自定义 Hook，复用逻辑更自然，组合更方便                      |
+| **性能优化**  | `shouldComponentUpdate` / `PureComponent`                    | `React.memo` + `useCallback` / `useMemo`                     |
+
+## 合成事件
+
+* 完整流程
+
+1. 用户点击按钮 触发原生click事件
+2. 原生事件在DOM树中冒泡
+3. React根节点的监听器捕获该事件
+4. React从事件池中获取一个合成事件 并且用原生事件的信息填充他
+5. 关键步骤：React模拟事件冒泡 在组件树中逐级调用对应的事件处理函数
+6. 执行我们定义的事件处理函数 如onclick
+7. 事件处理完毕 事件对象被回收到事件池 清空属性等待下一次使用
+
+* 涉及到的两次冒泡
+
+1. 原生事件冒泡： 在真实DOM树中 从target到root ---被root节点的react监听器捕获 分出事件对象同步事件信息
+2. 合成事件分发（模拟冒泡）： 在虚拟组件树中 从源组件到其所有父组件---执行事件的回调
+
+* 总结
+
+性能：通过**在根节点进行事件委托** 极大减少了在真实DOM上的监听器数量，优化了内存和性能
+
+兼容性： SyntheticEvent（合成事件）作为核心对象 磨平了浏览器差异 提供了统一的 稳定的W3C标准接口
+
+事件池： SyntheticEvent对象被复用以提升性能 导致不能在异步任务中直接访问事件 如需持久化 使用e.persist（）
+
+## 受控组件和非受控组件
+
+核心：表单的数据到底由谁管理
+
+* **受控组件**
+
+ -- 在受控组件中 表单元素的值由React的state完全控制 React state是表单数据的‘‘唯一来源’’
+
+工作流程
+
+1. 组件state中存储着表单的当前值
+2. state值通过value prop传递给表单元素
+3. 用户交互（如输入）触发onchange事件 
+4. onchange事件处理器更新组件的state
+5. state更新导致组件重新渲染 表单显示新值
+
+优势：
+
+1. 即时验证与格式化--由于每次输入都会更新state 我们可以在onChange中轻松实现实时的数据校验 格式化或者字符限制
+2. 条件化逻辑-- 可以根据输入框的值 动态地禁用提交按钮或显示提示信息
+3. 单一数据源 -- 表单状态集中在组件的state中管理 使得调试和状态追踪变得更清晰 可预测
+
+* 非受控组件
+
+-- 与受控组件相反 非受控组件的表单数据由DOM自身管理
+
+React不再直接控制表单元素的值 而是使用ref来获取对DOM节点的直接引用
+
+在需要时 （例如表单提交时） 拉取当前值
+
+工作流程：
+
+1. 使用useRef创建一个引用
+2. 通过ref prop将其附加到DOM元素上
+3. 使用defaultValue设置初始值 而不是value
+4. 在需要时通过ref.current.value读取值
+
+优势：
+
+1. 代码更简洁--对于简单的表单 无需为每个输入框都编写onChange和useState 代码量更少
+2. 更接近原生HTML--其工作方式与传统HTML表单类似 学习成本较低
+3. 集成方便 -- 在与一些直接操作DOM的第三方库集成时可能更方便
+4. 性能（理论上）-- 避免了每次输入都出发React的重新渲染 但在绝大部分应用中 这点性能差异可以忽略不计
+
+---
+
+## useState是异步的吗
+
+结论：是“延迟处理” 而非异步
+
+useState的更新机制可以总结为以下几点
+
+1. 同步提交，延迟执行：setState本身是同步的 但他出发的状态更新和组件重渲染 会被React延迟处理并进行批量合并
+2. 性能最优化：通过将多次状态更新合并为单次渲染 避免不必要的计算和DOM操作 最大化应用性能
+3. 状态一致性：保证在一次事件处理流程中 所有状态修改能够同步生效 防止出现不完整的中间ui状态 提升应用健壮性
+
+## useState函数式更新和直接更新的区别
+
+如果新的state依赖于旧的state 必须始终使用函数式更新
+
+```js
+//计数器
+setCount(prev=>prev+1)
+//布尔值切换
+setToggle(prev=>!prev)
+//数组操作
+setItems(prev=>[...prev,newItem])
+//对象操作
+setUser(prev=>{
+    ...prev,
+    name:'newName'
+})
+```
+
+如果与旧的state完全无关 可以直接传入新值
+
+```js
+//表单输入
+setName(e.target.value)
+//重置状态
+setCount(0)
+//设置从api获取的数据
+setData(Data)
+```
+
+结论：
+
+​	函数式更新并非可有可无的语法糖 而是react提供的强大工具 用于编写更健壮、更可预测的组件

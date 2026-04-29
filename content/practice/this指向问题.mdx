@@ -1,0 +1,150 @@
+题目是：
+
+```js
+var name = "global"
+
+const obj1 = {
+  name: "obj1",
+  say: function() {
+    const inner = () => {
+      console.log(this.name)
+    }
+    return inner
+  }
+}
+
+const obj2 = { name: "obj2" }
+
+const fn = obj1.say()
+fn()
+fn.call(obj2)
+```
+
+------
+
+## 🔹 分析步骤
+
+1. **调用 obj1.say()**
+
+```js
+const fn = obj1.say()
+```
+
+- `say` 是普通函数，通过 `obj1.say()` 调用 → this = `obj1`
+- `inner` 是箭头函数，它的 this 会捕获 **定义时所在的函数 say 的 this**
+- 因此 `inner` 内的 this = `obj1`
+
+返回 fn，就是 `inner`。
+
+------
+
+1. **调用 fn()**
+
+```js
+fn()
+```
+
+- fn 是箭头函数，this 被锁定为 `obj1`
+- **箭头函数 this 无法被 call/apply 改变**
+- 输出：`obj1` ✅
+
+------
+
+1. **调用 fn.call(obj2)**
+
+```js
+fn.call(obj2)
+```
+
+- 再次调用 fn（箭头函数）
+- 箭头函数 this 永远是定义时的 this → 还是 `obj1`
+- 输出：`obj1` ✅
+
+------
+
+## 🔹 结论
+
+- **第一次 fn() → obj1**
+- **第二次 fn.call(obj2) → obj1**
+
+> 你的答案里写的 `global` / `obj2` 是常见误区：箭头函数的 this 是 **定义时绑定的**，不会被 call/apply 改变。
+
+------
+
+```js
+var name = "global"
+
+function Foo() {
+    this.name = "foo"
+
+    this.a = function () {
+        console.log("a:", this.name)
+    }
+
+    this.b = () => {
+        console.log("b:", this.name)
+    }
+}
+
+Foo.prototype.c = function () {
+    console.log("c:", this.name)
+}
+
+Foo.prototype.d = () => {
+    console.log("d:", this.name)
+}
+
+const obj = { name: "obj" }
+
+const f = new Foo()
+
+// 题目，问下面每句分别输出什么？
+
+f.a()               // 1 foo
+f.a.call(obj)       // 2 obj
+
+f.b()               // 3 foo
+f.b.call(obj)       // 4 foo
+
+f.c()               // 5 foo
+f.c.call(obj)       // 6 obj
+
+f.d()               // 7 global
+f.d.call(obj)       // 8 global
+
+```
+
+| 调用 | 函数类型                    | this 指向                       | 输出     |
+| ---- | --------------------------- | ------------------------------- | -------- |
+| 1    | 构造函数中的普通函数        | f 实例                          | `foo`    |
+| 2    | 普通函数 + call(obj)        | obj                             | `obj`    |
+| 3    | 构造函数中的箭头函数        | 绑定在构造函数执行时的 this → f | `foo`    |
+| 4    | 箭头函数 + call(obj) 无效   | f                               | `foo`    |
+| 5    | 原型上的普通函数            | f                               | `foo`    |
+| 6    | call(obj) 改变普通函数 this | obj                             | `obj`    |
+| 7    | 原型上的箭头函数            | 定义时外层作用域（全局）        | `global` |
+| 8    | call(obj) 对箭头无效        | 仍是全局                        | `global` |
+
+```js
+function fn() {
+    return {
+        a: 200,
+        m: function() { console.log(this.a) },
+        n: () => { console.log(this.a) }
+    }
+}
+
+const fn0 = fn();
+fn0.n(); // ?
+
+```
+
+分析：
+
+1. 箭头函数 `n` 定义在 **对象字面量里**
+2. 它的外层函数是 **fn()**
+3. `fn()` 是普通函数调用 → 在 **严格模式下 Node.js 模块**中 this = undefined
+4. **箭头函数捕获的是 fn 内的 this** → undefined
+
+⚡ **所以 fn0.n() 的调用者是 fn0，但箭头函数 this 不会指向 fn0！**
+ 箭头函数 this 永远是**定义时捕获的 this**，调用对象无关。

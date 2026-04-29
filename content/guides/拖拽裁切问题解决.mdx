@@ -1,0 +1,133 @@
+# 解决 React dnd-kit 拖拽元素被 overflow 容器遮挡的问题
+
+在构建看板（Kanban）或列表拖拽应用时，经常遇到一个经典 CSS 问题：当从一个设置了 `overflow: auto` 或 `overflow: hidden` 的容器中拖拽元素时，拖拽的“影子”会被容器边界裁剪或遮挡，无法显示在容器外部。
+
+本文总结了该问题的原因、解决方案及代码实现。
+
+## 1. 问题原因
+
+这是一个由 CSS **层叠上下文 (Stacking Context)** 和 **溢出裁剪 (Overflow Clipping)** 规则导致的问题。
+
+*   **DOM 结构限制**：默认情况下，拖拽库（如 dnd-kit）通常使用 `transform` 来移动原本的 DOM 元素。
+*   **Overflow 裁剪**：当父容器设置了 `overflow: hidden/auto`，浏览器会创建一个裁剪区域。作为该父容器子元素的拖拽项，无论其 `z-index` 设置多高，都无法渲染在父容器的边界框之外。
+
+**形象比喻**：就像在一个没有窗户的房间里放风筝，不管风筝飞多高，都飞不出天花板。
+
+## 2. 解决方案：Portal + Overlay
+
+核心思路是**“金蝉脱壳”**：
+不再移动原始 DOM 元素，而是在拖拽开始时，在 DOM 树的顶层（通常是 `document.body`）创建一个完全一样的“替身”元素跟随鼠标移动。
+
+*   **DragOverlay (替身)**：`dnd-kit` 提供的组件，用于渲染拖拽时的视觉层，它独立于原始列表结构。
+*   **React Portal (传送门)**：使用 `createPortal` 将 `DragOverlay` 渲染到 `document.body` 下，使其脱离原有的 CSS 布局限制（特别是 `overflow` 限制）。
+
+## 3. 核心 API
+
+### dnd-kit
+*   **`<DndContext />`**: 拖拽上下文，管理拖拽事件 (`onDragStart`, `onDragEnd`)。
+*   **`<DragOverlay />`**: 专门用于渲染被拖拽时的浮层组件。
+*   **`useDraggable`**: 用于让组件可拖拽的 Hook。
+
+### React
+*   **`createPortal(child, container)`**: 将子节点渲染到存在于父组件 DOM 层次结构之外的 DOM 节点中。
+
+## 4. 代码实现流程
+
+### 步骤 1: 准备 Draggable 组件 (BoardTask)
+
+修改任务组件，使其能够区分“静止状态”和“Overlay 状态”。Overlay 状态下通常需要禁用拖拽逻辑（因为它只是个视觉展示）并添加阴影效果。
+
+```tsx
+// src/components/Board/task.tsx
+import { useDraggable } from '@dnd-kit/core'
+
+type BoardTaskProps = {
+    taskName: string
+    id: string
+    isOverlay?: boolean // 新增标志位
+}
+
+export const BoardTask = ({ taskName, id, isOverlay }: BoardTaskProps) => {
+    const { attributes, listeners, setNodeRef, transform } = useDraggable({
+        id: id,
+        disabled: isOverlay // 如果是 Overlay，禁用拖拽逻辑，避免重复注册
+    })
+
+    const style = transform && !isOverlay ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    } : undefined
+
+    return (
+        <div 
+            ref={setNodeRef}
+            style={style}
+            {...listeners}
+            {...attributes}
+            // Overlay 状态添加 shadow-xl 提升视觉层级
+            className={`w-full h-8 ... ${isOverlay ? 'shadow-xl' : ''}`}
+        >
+            <div className="text-sm">{taskName}</div>
+        </div>
+    )
+}
+```
+
+### 步骤 2: 在父组件实现 Portal 和 Overlay
+
+在最外层的 `Board` 组件中，使用 `createPortal` 将 `DragOverlay` 挂载到 `document.body`。
+
+```tsx
+// src/components/Board/index.tsx
+import { DndContext, DragOverlay } from '@dnd-kit/core'
+import { createPortal } from 'react-dom'
+import { useState } from 'react'
+import { BoardTask } from './task'
+
+export const Board = () => {
+    const [activeId, setActiveId] = useState<string | null>(null)
+    const [activeTask, setActiveTask] = useState<any>(null)
+
+    // 1. 记录拖拽开始时的元素信息
+    const handleDragStart = (event: any) => {
+        const { active } = event
+        setActiveId(active.id)
+        // 查找当前任务数据以便在 Overlay 中渲染
+        const task = findTaskById(active.id) 
+        setActiveTask(task)
+    }
+
+    const handleDragEnd = (event: any) => {
+        setActiveId(null)
+        setActiveTask(null)
+        // ... 处理拖拽逻辑
+    }
+
+    return (
+        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            {/* 这里的列表容器可以随意设置 overflow: auto */}
+            <div className="board-container">
+                {/* ... 渲染 BoardList ... */}
+            </div>
+
+            {/* 2. 使用 Portal 将 Overlay 渲染到 body */}
+            {createPortal(
+                <DragOverlay>
+                    {activeId && activeTask ? (
+                        // 渲染替身，传入 isOverlay 属性
+                        <BoardTask 
+                            id={activeId} 
+                            taskName={activeTask.taskName} 
+                            isOverlay 
+                        />
+                    ) : null}
+                </DragOverlay>,
+                document.body // 目标容器
+            )}
+        </DndContext>
+    )
+}
+```
+
+## 5. 总结
+
+通过 **Portal** 将 **DragOverlay** 提升到 `body` 层级，我们成功绕过了局部容器的 `overflow` 限制。这是解决此类 CSS 布局冲突最标准、最稳健的 React 模式。

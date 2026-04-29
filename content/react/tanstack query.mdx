@@ -1,0 +1,485 @@
+## tanstack query
+
+## 1. 全局注入
+
+```jsx
+import {creatRoot} from 'react-dom/client'
+import App from './App.tsx'
+import {QueryClient,QueryClientProvider} from '@tanstack/react-query'
+
+const queryClient = new QueryClient();
+
+creatRoot(document.getElementById('root')).render(
+	<QueryClientProvider client={queryClient}>
+    	<App/>
+    </QueryClientProvider>
+)
+```
+
+## 2. useQuery基本使用
+
+```jsx
+// 测试tanstack query
+'use client'
+import { useQuery } from "@tanstack/react-query";
+
+const Test = () => {
+    const { data, isPending, refetch } = useQuery({
+        queryKey: ['test'],
+        queryFn: async () => {
+            const res = await new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    resolve('test')
+                }, 1000)
+            })
+            return res
+        }
+    })
+
+    return (
+        <div>
+            {isPending && <div>loading...</div>}
+            {JSON.stringify(data)}
+            <button onClick={() => refetch()}>refetch</button>
+        </div>
+    )
+}
+export default Test
+```
+
+* 带请求参数用法：
+
+```tsx
+// 测试tanstack query
+'use client'
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+
+const Test = () => {
+
+    // 模拟请求参数
+    const [id, setId] = useState(1)
+
+    // 请求函数
+    const queryFn = async (id: number) => {
+        const res = await new Promise((resolve, reject) => {
+            setTimeout(() => {
+                resolve('test' + id)
+            }, 1000)
+        })
+        return res
+    }
+
+
+    const { data, isPending, refetch } = useQuery({
+        queryKey: ['test', id],
+        queryFn: () => queryFn(id)
+    })
+
+    return (
+        <div>
+            {isPending && <div>loading...</div>}
+            {JSON.stringify(data)}
+            <br />
+            <button onClick={() => refetch()}>refetch</button>
+            <br />
+            <button onClick={() => setId((pre) => pre + 1)}>id+1</button>
+        </div>
+    )
+}
+export default Test
+```
+
+* 为了解决传统react应用useEffect无法写进条件判断的问题 无法根据布尔值来判断是否调接口 useQuery有一个配置
+
+```tsx
+const [on,setOn] = useState(true)  
+const { data, isPending, refetch } = useQuery({
+        queryKey: ['test', id],
+        queryFn: () => queryFn(id),
+    	enabled:on
+    })
+```
+
+## 3.useSuspenseQuery悬念查询 与suspence
+
+1. 悬念查询
+
+* 在ts中 默认解构出的data是any||unknow类型 如果知道返回的数据结构 可以通过类型来约束data
+
+```tsx
+const getTodos = async ():Promise<Todo[]>=>{
+    ....
+    return res
+}
+
+type Todo = {
+    userId:number,
+    id:number,
+    title:string,
+    completed:boolean
+}
+```
+
+* 如果使用ts 如以上todos案例 useQuery的返回值加了类型约束后 返回值data类型可能为todo[] || undefined,这时如果在模板中使用 data[0]?.title ts就会报错 这时就需要用到useSuspenseQuery 他的返回值是todo[]
+
+```tsx
+
+//悬念查询
+//可以保证返回的数据是一种可执行类型 而不是与undefined的联合类型
+//适合处理想确保数据始终是定义的 并且不存在未定义的情况
+const {data} = useSuspenseQuery(....)
+return(
+	<div>
+    	{data[0]?.title}
+    </div>
+)
+```
+
+2. 与react.Suspence联合使用
+
+如果子组件使用了useSuspenseQuery 父组件引入子组件并且将子组件包裹在Suspense标签中
+
+那么当query未完成 组件会渲染suspense标签的fallback
+
+```tsx
+function App(){
+    return (
+    	<Suspense fallback={<Loading/>}>
+        	<Son/>
+        </Suspense>
+    )
+}
+function Son(){
+    const {data} = useSuspenseQuery(....)
+    return(
+        <div>
+            {data[0]?.title}
+        </div>
+    )	
+}
+```
+
+* 悬念查询的一个缺点是不能使用enabled配置来模拟条件查询 如果用条件查询的话最好用query
+
+## 4.query配置的抽离
+
+如果一个页面的请求比较多 那么useQuery和async函数的代码会堆积在组件中 这时可以将其抽离出来
+
+创建于给单独的文件
+
+```tsx
+import {queryOptions} from "@tanstack/react-query";
+
+export default function createTodoQueryOptions(){
+    return queryOptions({
+        queryKey:['todos'],
+        queryFn:getTodos,
+    })
+}
+
+const getTodos = async ()：Promise<Todo[]> => {
+    const response = await fetch(...)
+    return response.json();
+}
+
+type Todo = {
+    userID:number;
+    id:number;
+    ...
+}
+```
+
+
+
+## 5. 同时进行多个查询
+
+如果要同时进行多个查询 那么可以使用useQueries
+
+```tsx
+const [{data},result2,result3] = useQueries({
+    queries:[
+        createTodoQueryOptions(),
+        createUsersQueryOptions(),
+        createPostQueryOptions()
+    ]
+})
+//同样也有suspenseQueries
+const [{data},result2,result3] = useSuspenseQueries({
+    queries:[
+        createTodoQueryOptions(),
+        createUsersQueryOptions(),
+        createPostQueryOptions()
+    ]
+})
+```
+
+## 6. 查询依赖上一个查询
+
+ 比如需求是获取用户id然后获取用户详情
+
+那么第一个查询获取用户 第二个查询通过条件判断也就是enabled属性 来判断第二个查询是否执行
+
+```tsx
+const {data:users} = useQuery(createUserQueryOptions());
+const userId = user.id
+//这里将获取到的用户id通过！！转为布尔类型来判断第二个查询是否自动执行----------------------
+const {data:posts} = useQuery({...createPostQueryOptions,enabled:!!userId})
+
+//第二种方法是第一个查询使用悬念查询 这样可以保证返回的data是定义的------------------------
+const {data:users} = useSuspenseQuery(createUserQueryOptions());
+const userId = user.id
+const {data:posts} = useQuery(createPostQueryOptions)
+
+//第二种方法的工作原理------------------------------------------------------------------
+function Component() {
+    // 1. 第一次渲染：users 还在加载
+    const {data: users} = useSuspenseQuery(...)
+    // ⬆️ 这里会抛出 Promise，组件暂停渲染
+    
+    // ❌ 下面的代码不会执行
+    const userId = users.id
+    const {data: posts} = useQuery(...)
+}
+
+// 2. users 加载完成后，组件重新渲染
+function Component() {
+    const {data: users} = useSuspenseQuery(...)
+    // ✅ 现在 users 有值了
+    
+    const userId = users.id  // 可以直接访问
+    const {data: posts} = useQuery(...)  // 现在才执行
+}
+```
+
+**本质：** useSuspenseQuery 把异步变成了"同步"的写法，通过 Suspense 机制阻塞组件渲染。
+
+## 7. 轮询
+
+```tsx
+  const { data: videos, isLoading, error } = useQuery<Video[]>({
+    queryKey: ["videos"],
+    queryFn: async () => {
+      const res = await request.get("/videos");
+      return res.data;
+    },
+    // 智能轮询：仅当有视频处于“处理中”状态时才轮询，否则停止
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (Array.isArray(data) && data.some((v: Video) => v.status === 'processing')) {
+        return 3000;//time
+      }
+      return false;
+    }
+  });
+```
+
+## 8. useMutation
+
+```js
+const deleteMutation = useMutation({
+  mutationFn: id => axios.delete(`/users/${id}`),
+  onSuccess: () => queryClient.invalidateQueries(["users"])
+});
+
+deleteMutation.mutate(userId);
+
+```
+
+什么时候选 mutateAsync？
+
+后续操作 **依赖后端返回值**：
+
+(1) 登录
+
+```
+const res = await loginMutation.mutateAsync(form);
+localStorage.setItem("token", res.token);
+router.push("/home");
+```
+
+(2) 创建成功后跳转到详情页 
+
+```
+const user = await createUserMutation.mutateAsync(form);
+router.push(`/user/${user.id}`);
+```
+
+(3) 多个操作串联
+
+```
+const saved = await saveMutation.mutateAsync(form);
+await uploadMutation.mutateAsync(saved.id);
+```
+
+(4) 需要 try/catch 捕获错误
+
+```
+try {
+  await updateMutation.mutateAsync(data);
+} catch (err) {
+  alert("出错了");
+}
+```
+
+# 用一个例子串起来
+
+```js
+const queryClient = useQueryClient();
+
+const todoQuery = useQuery({
+  queryKey: ["todos"],
+  queryFn: () => axios.get("/todos")
+});
+
+const addTodoMutation = useMutation({
+  mutationFn: (newTodo) => axios.post("/todos", newTodo),
+  onSuccess: () => {
+    // 让列表重新刷新
+    queryClient.invalidateQueries(["todos"]);
+  }
+});
+
+// 点击提交按钮
+const handleSubmit = () => {
+  addTodoMutation.mutate({ title: "新任务" });
+};
+```
+
+流程：
+
+1. 组件挂载 → useQuery 自动获取 todos
+2. 用户点提交 → mutate 手动触发 POST
+3. POST 成功 → onSuccess → invalidateQueries
+4. useQuery 自动重新发请求
+5. 页面自动显示最新的 todos 列表
+
+你完全不需要写 “刷新列表”。
+
+# 数据同步机制
+
+
+
+
+## React Query 的数据同步机制
+
+### 核心原理：共享的全局缓存
+
+React Query 通过一个全局的 `QueryClient` 实例管理所有查询缓存，所有组件共享这个缓存。
+
+### 工作流程
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    QueryClient (全局单例)                    │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │              内存缓存 (In-Memory Cache)               │  │
+│  │  ┌───────────────────────────────────────────────┐   │  │
+│  │  │ ['todos', '2025-01-15'] → { data: [...], ... }│   │  │
+│  │  │ ['todos', '2025-01-16'] → { data: [...], ... }│   │  │
+│  │  │ ['monthStatus', 2025, 1] → { data: {...}, ... }│   │  │
+│  │  └───────────────────────────────────────────────┘   │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+         ▲                              ▲
+         │                              │
+    ┌────┴────┐                    ┌────┴────┐
+    │         │                    │         │
+TodosDropdown              Todos Page
+(在 Layout 中)              (独立页面)
+```
+
+### 详细步骤
+
+#### 1. 初始化阶段（应用启动）
+
+```typescript
+// providers.tsx
+const queryClient = new QueryClient()  // ← 创建全局单例
+
+<QueryClientProvider client={queryClient}>  // ← 注入到整个应用
+  {children}
+</QueryClientProvider>
+```
+
+#### 2. TodosDropdown 组件（Layout 中）
+
+```typescript
+// todos-dropdown.tsx (第 26-30 行)
+const { data: todos } = useQuery({
+  queryKey: ['todos', today],  // ← 查询键：['todos', '2025-01-15']
+  queryFn: () => todosApi.getTodosByDate(today),
+})
+
+// 双击切换完成状态 (第 33-46 行)
+const toggleMutation = useMutation({
+  mutationFn: (id: string) => todosApi.toggleComplete(id),
+  onSuccess: () => {
+    // 🔑 关键：标记缓存为"过期"
+    queryClient.invalidateQueries({ queryKey: ['todos', today] })
+    queryClient.invalidateQueries({ queryKey: ['todos'] })  // 所有 todos
+  },
+})
+```
+
+#### 3. Todos 页面组件
+
+```typescript
+// todos/page.tsx (第 35-38 行)
+const { data: todos = [] } = useQuery({
+  queryKey: ['todos', dateStr],  // ← 如果 dateStr === today，使用相同的缓存！
+  queryFn: () => todosApi.getTodosByDate(dateStr),
+})
+```
+
+### 同步过程
+
+```
+步骤 1: 用户在 Layout 中双击完成任务
+   ↓
+步骤 2: toggleMutation.mutate() 调用 API
+   ↓
+步骤 3: API 返回成功，触发 onSuccess
+   ↓
+步骤 4: queryClient.invalidateQueries(['todos', today])
+   ↓
+步骤 5: QueryClient 标记缓存为"过期" (stale)
+   ↓
+步骤 6: React Query 检测到缓存过期
+   ↓
+步骤 7: 自动触发所有使用该查询键的 useQuery 重新获取数据
+   ↓
+步骤 8: Todos 页面的 useQuery 自动重新调用 API
+   ↓
+步骤 9: 新数据更新到缓存，组件自动重新渲染
+```
+
+### 关键点
+
+1. 共享缓存：所有组件通过 `QueryClientProvider` 共享同一个 `QueryClient` 实例
+2. 查询键匹配：使用相同的 `queryKey` 会共享同一份缓存数据
+3. 自动失效：`invalidateQueries` 会标记匹配的查询为过期
+4. 自动重新获取：`useQuery` 会监听缓存状态，过期时自动重新获取
+5. 无需 WebSocket：这是客户端内存缓存机制，不依赖网络推送
+
+### 代码验证
+
+可以在浏览器控制台验证：
+
+```typescript
+// 在浏览器控制台执行
+import { useQueryClient } from '@tanstack/react-query'
+
+// 查看当前缓存
+const queryClient = useQueryClient()
+console.log(queryClient.getQueryCache().getAll())
+```
+
+### 总结
+
+- 不需要 WebSocket：这是客户端内存缓存同步
+- 不需要手动刷新：React Query 自动处理
+- 性能优化：相同查询键的数据会被缓存和复用
+- 实时同步：任何组件调用 `invalidateQueries`，所有相关组件都会自动更新
+
+这就是为什么在 Layout 中修改数据后，Todos 页面会自动更新的原因。

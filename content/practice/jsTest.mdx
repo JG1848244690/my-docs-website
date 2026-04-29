@@ -1,0 +1,75 @@
+### 手写Promise.all
+
+```javascript
+Promise._all = function (promises) {
+  // 该方法返回一个promise对象
+  return new Promise((resolve, reject) => {
+    // 该方法的参数需为一个可迭代对象
+    if (promises == null || typeof promises[Symbol.iterator] !== "function") {
+      throw new TypeError(`${promises} is not a iterable`);
+    }
+    promises = [...promises];
+
+    // 可迭代对象为空则返回已resolve的promise
+    if (promises.length === 0) {
+      resolve([]);
+    }
+
+    let count = 0;
+    const values = [];
+    promises.forEach((promise, index) => {
+      // 保证可迭代对象的元素为promise，使用Promise.resolve()处理
+      Promise.resolve(promise)
+        .then((res) => {
+          values[index] = res;
+          if (++count === promises.length) resolve(values);
+        })
+        .catch(reject);
+    });
+  });
+};
+
+```
+
+```javascript
+Promise.myAll = function (proms) {
+    let res, rej
+    const p = new Promise((resolve, reject) => {
+        res = resolve()
+        rej = reject()
+
+    })
+    let i = 0
+    let fulfilled = 0
+    const result = []
+
+    for (const prom of proms) {
+        const index = i
+        i++
+        Promise.resolve(prom).then((data) => {
+            // 完成的数据汇总到最终结果
+            result[index] = data;
+            //判断是否全部完成
+            fulfilled++
+            if (fulfilled === i) {
+                res(result)
+            }
+        }, rej)
+    }
+    if (i === 0) {
+        res([])
+    }
+
+    return p
+}
+
+Promise.myAll([]).then((res) => {
+    console.log(res);
+})
+```
+
+
+
+github地址：s
+
+https://github.com/lydiahallie/javascript-questions/blob/master/zh-CN/README-zh_CN.md

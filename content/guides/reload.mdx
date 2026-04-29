@@ -1,0 +1,88 @@
+这段代码是一个用于实现前端开发中“热重载”（Live Reloading）功能的脚本，通常用于开发过程中自动刷新页面或更新CSS样式，以提高开发效率。下面是对这段代码的详细解释：
+
+### 1. **SVG支持的注释**
+```javascript
+// <![CDATA[
+```
+这是为了确保SVG文件中嵌入的JavaScript代码能够正确解析。`CDATA`（Character Data）部分告诉解析器，这部分内容是字符数据，不应被解析为HTML或SVG标签。这在SVG文件中嵌入JavaScript时非常有用。
+
+### 2. **检查WebSocket支持**
+```javascript
+if ('WebSocket' in window) {
+```
+这段代码检查浏览器是否支持`WebSocket`。`WebSocket`是一种网络通信协议，允许浏览器和服务器之间进行全双工通信。如果浏览器不支持`WebSocket`，代码会输出错误信息。
+
+### 3. **定义`refreshCSS`函数**
+```javascript
+function refreshCSS() {
+    var sheets = [].slice.call(document.getElementsByTagName("link"));
+    var head = document.getElementsByTagName("head")[0];
+    for (var i = 0; i < sheets.length; ++i) {
+        var elem = sheets[i];
+        var parent = elem.parentElement || head;
+        parent.removeChild(elem);
+        var rel = elem.rel;
+        if (elem.href && typeof rel != "string" || rel.length == 0 || rel.toLowerCase() == "stylesheet") {
+            var url = elem.href.replace(/(&|\?)_cacheOverride=\d+/, '');
+            elem.href = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_cacheOverride=' + (new Date().valueOf());
+        }
+        parent.appendChild(elem);
+    }
+}
+```
+- **功能**：这个函数用于刷新页面中的CSS文件。
+- **工作原理**：
+  1. 获取所有`<link>`标签（通常用于引入CSS文件）。
+  2. 遍历这些`<link>`标签，将它们从DOM中移除。
+  3. 修改每个`<link>`标签的`href`属性，通过添加一个时间戳（`_cacheOverride`参数）来强制浏览器重新加载CSS文件，避免缓存问题。
+  4. 将修改后的`<link>`标签重新插入到`<head>`中。
+
+### 4. **建立WebSocket连接**
+```javascript
+var protocol = window.location.protocol === 'http:' ? 'ws://' : 'wss://';
+var address = protocol + window.location.host + window.location.pathname + '/ws';
+var socket = new WebSocket(address);
+```
+- **功能**：根据当前页面的协议（HTTP或HTTPS），建立一个WebSocket连接。
+- **`ws://`和`wss://`**：
+  - `ws://`用于非加密的WebSocket连接。
+  - `wss://`用于加密的WebSocket连接（类似于HTTPS）。
+
+### 5. **处理WebSocket消息**
+```javascript
+socket.onmessage = function (msg) {
+    if (msg.data == 'reload') window.location.reload();
+    else if (msg.data == 'refreshcss') refreshCSS();
+};
+```
+- **功能**：监听从WebSocket服务器发送的消息。
+- **消息处理**：
+  - 如果消息内容是`reload`，则调用`window.location.reload()`，刷新整个页面。
+  - 如果消息内容是`refreshcss`，则调用`refreshCSS()`函数，仅刷新CSS文件。
+
+### 6. **首次运行日志**
+```javascript
+if (sessionStorage && !sessionStorage.getItem('IsThisFirstTime_Log_From_LiveServer')) {
+    console.log('Live reload enabled.');
+    sessionStorage.setItem('IsThisFirstTime_Log_From_LiveServer', true);
+}
+```
+- **功能**：在首次运行时，输出一条日志信息到控制台，告知开发者热重载功能已启用。
+- **`sessionStorage`**：用于在浏览器会话期间存储数据。这里用来标记是否已经显示过日志信息。
+
+### 7. **不支持WebSocket的错误提示**
+```javascript
+else {
+    console.error('Upgrade your browser. This Browser is NOT supported WebSocket for Live-Reloading.');
+}
+```
+如果浏览器不支持`WebSocket`，会在控制台输出错误信息，提示用户升级浏览器。
+
+### 8. **结束注释**
+```javascript
+// ]]>
+```
+这是`CDATA`部分的结束标记，确保SVG解析器正确处理嵌入的JavaScript代码。
+
+### 总结
+这段代码通过WebSocket与服务器建立通信，监听服务器发送的指令（如`reload`或`refreshcss`），并在客户端执行相应的操作（刷新页面或刷新CSS）。这种机制大大提高了前端开发的效率，因为开发者无需手动刷新页面即可看到代码更改的效果。

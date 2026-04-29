@@ -4,7 +4,26 @@
       "Bash(npx tsc *)",
       "Bash(pnpm add *)",
       "Bash(pnpm dev *)",
-      "Read(//c/Users/xy/AppData/Local/Temp/claude/d--code-gh-my-docs-website/a06df725-2a70-44a9-92c4-b6e34e9edac8/tasks/**)"
+      "Read(//c/Users/xy/AppData/Local/Temp/claude/d--code-gh-my-docs-website/a06df725-2a70-44a9-92c4-b6e34e9edac8/tasks/**)",
+      "Bash(git status *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(gh repo *)",
+      "Bash(where gh *)",
+      "mcp__github__get_me",
+      "mcp__github__create_repository",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3000)",
+      "Bash(findstr LISTENING)",
+      "Bash(mv repo/docs/* .)",
+      "Bash(rmdir repo/docs)",
+      "Bash(mv repo *)",
+      "Bash(rm -rf repo_old)",
+      "Bash(rm -rf docs)",
+      "Bash(mv app/docs docs)"
     ]
   }
 }

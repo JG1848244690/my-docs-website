@@ -1,0 +1,1528 @@
+## 预编译-作用域 -作用域链-闭包
+
+### 作用域-作用域链
+
+- **介绍**：作用域决定了变量的访问权限。JS的作用域有全局作用域和局部作用域（函数作用域和块级作用域），在块级作用域中`let`和`const`限定变量仅在块内有效。
+- 运行期上下文： 当函数执行时 会创建一个成为执行期上下文的内部对象 （AO）。一个执行期上下文定义了一个函数执行时的环境，函数每次执行时对应的执行上下文都是独一无二的 所以多次调用一个函数会导致创建多个执行上下文。 当函数执行完毕 它所产生的执行上下文被销毁。
+- 每个js函数都是一个对象 有一个隐藏属性[[scope]] 存的是作用域链
+
+如图
+
+![JavaScript 闭包](/assets/closure1.png)
+
+如图一，一个函数有定义和执行阶段，当代码执行到函数的定义后，函数的[[scope]]属性中存着它的作用域链。如果在全局定义的函数，那么第零位就是GO（global object）。
+
+当函数被执行的时候，第一步就是创建一个函数的AO对象 这里涉及到预编译 然后将这个ao对象的地址存到作用域链的第0位 指向创建的这个AO对象 
+
+当函数执行过程中需要用到某个变量时，会先从自己的AO对象上找，如果找不到，就沿着作用域链一层层找。
+
+ 预编译以及执行完成后 作用域链对应的AO对象的地址被清理 
+
+### 闭包
+
+当函数中返回函数或者保存出一个函数时，就会形成闭包。
+
+概念：函数在定义是捕获外层作用域的变量并保持引用  闭包会导致原有作用域链不被释放 造成内存泄漏
+
+实现：闭包可以用于封装私有变量 常见是一个函数内返回另一个函数并使用外层变量
+
+**闭包的形成**
+
+```js
+function a() {  
+    let aaa = 1;  
+    function b(){
+        aaa++
+    };
+    return b;
+}
+const inc = a();
+inc()
+```
+
+如图：
+
+![JavaScript 闭包](/assets/closure2.png)
+
+首先 a被定义 此时a的作用域链存的是GO，然后a被执行 此时a的作用域链第零位被push进去AO对象 
+
+AO对象中含有aaa的定义
+
+然后b被定义 此时b在a的AO对象的基础上创建了自己的ao对象（与a的AO是同一个）
+
+然后被返回出去，然后a执行完毕 a的作用域链中的第零位被销毁，AO对象依然存在，因为b依旧指向这个AO，
+
+AO对象还有引用 所以未被销毁。
+
+然后inc接收到a的执行结果 也就是b函数 然后inc执行
+
+b创建自己的AO对象 然后放到自己的作用域链的第0位
+
+现在b的[[scope]]对象结构如下：
+
+```js
+scope chain
+0  bAO
+1  aAO
+2  GO
+```
+
+然后b执行 在b的ao对象中找aaa没找到 就沿着作用域链找a的AO对象上的aaa，然后执行++
+
+然后b执行完成 b的ao对象销毁 但是他的[[scope]]对象的第零位还是指向a的AO 并且aaa的值已经被改变
+
+这样就形成了闭包 也就是**函数捕获外层作用域的变量并保持引用**
+
+
+
+### 预编译
+
+预编译发生在函数执行的前一刻
+
+```js
+function fn(a){
+  console.log(a);
+  var a = 123;
+  console.log(a);
+  function a(){};
+  console.log(a);
+  var b = function(){};
+  console.log(b);
+  function d(){};
+}
+fn(3)
+```
+
+流程：（函数中 函数里生成的是AO对象 全局生成的是GO对象 也就是window）
+
+1. 创建AO对象（执行器上下文）
+
+```js
+AO{
+    //空
+}
+```
+
+2. 找形参和变量声明 将变量名和形参名作为AO属性名 值为undefined。
+
+```js
+AO{
+	a:undefined,
+	b:undefined,
+	d:undefined,
+}
+```
+
+3. 将实参值和形参统一。
+
+```js
+AO{
+    a:3,
+    b:undefined,
+    d:undefined,
+}
+```
+
+4. 在函数体里面找函数声明（function而不是函数表达式），然后赋值给变量
+
+```js
+AO{
+    a:function(){},
+    b:undefined,
+    d:function(){},
+}
+```
+
+然后开始执行代码
+
+```js
+function fn(a){
+  console.log(a);//funciton
+  var a = 123;
+  console.log(a);//123
+  function a(){};
+  console.log(a);//123
+  var b = function(){};
+  console.log(b);//function
+  function d(){};
+}
+fn(3)
+```
+
+这就是预编译。
+
+## JS的垃圾回收机制
+
+1. **内存分配**：当创建变量、对象或函数时，分配相应的内存。
+2. **内存回收**：当这些内存不再被使用时，释放内存。
+
+**引用计数（Reference Counting）**：
+
+- 每个对象都有一个引用计数，表示有多少其他对象引用了它。
+- 当引用计数为 0 时，说明该对象不再被使用，可以回收其内存。
+- **缺陷**：会导致 **循环引用** 问题（两个对象互相引用，但再也无法被访问）。
+
+```typescript
+let obj1 = {};
+let obj2 = {};
+obj1.ref = obj2; // obj1 引用 obj2
+obj2.ref = obj1; // obj2 引用 obj1
+// 即使 obj1 和 obj2 不再被使用，由于互相引用，它们的引用计数不会变为 0，造成内存泄漏。
+```
+
+
+
+**可达性（Reachability）**：
+
+- 现代 JavaScript 引擎普遍使用 **标记清除（Mark-and-Sweep）算法**，以对象的可达性来判断是否回收。
+- **可达对象** 是指从 **根（root）对象** 出发可以直接或间接访问到的对象。
+
+- - 根对象：在浏览器中是 `window`，在 Node.js 中是 `global`。
+  - 任何不可达的对象都会被垃圾回收。
+
+```typescript
+let obj = { name: "John" }; // obj 是可达的
+obj = null; // obj 不再被引用，可被垃圾回收
+function test() {
+    let obj = { name: "John" }; // obj 可达
+    let anotherObj = { age: 25 }; // anotherObj 可达
+}
+// 当 test() 执行完毕，obj 和 anotherObj 变为不可达，内存将被回收。
+```
+
+## js创建对象的方式
+
+**三种基本的方式** 
+
+- Object构造函数
+
+1. 对象字面量
+
+2. Object.create()
+
+- 类（语法糖）
+- 四种运用原型对象继承的方式 ES6开始支持类和继承 涵盖了之前规范设计的基于原型的继承方式
+
+工厂模式
+
+构造函数模式
+
+原型模式
+
+组合模式
+
+1. 构造函数
+
+创建自定义对象可以创建Object的一个新实例 再添加属性和方法
+
+```javascript
+let person = new Object();
+
+// 添加属性
+person.name = "Lucy";
+
+// 添加方法
+person.sayName = function() {
+  console.log(this.name)
+}
+```
+
+2. 对象字面量
+
+对象字面量创建新对象更为简单直接。如下所示：
+
+```javascript
+let person = {
+  name: "Lucy",
+  sayName() {
+    console.log(this.name)
+  }
+}
+```
+
+3. Object.create（）
+
+`Object.create()`方法创建一个新的对象，使用现有的对象作为新创建对象的原型。
+
+```javascript
+let person = {
+  name: "Lucy",
+  sayName() {
+    console.log(this.name)
+  }
+}
+
+let person1 = Object.create(person);
+console.log(person1.name); // "Lucy"
+```
+
+4.类（ES6）
+
+类用于创建对象的模版，它建立在原型上。类是“特殊的函数”，类语法有两个组成部分：类表达式和类声明。
+我们用类声明来创建一个对象：
+
+```javascript
+class Person {
+  constructor(name) {
+    this.name = name;
+  }
+	// 定义方法
+  sayName() {
+    console.log(this.name)
+  }
+}
+
+const person1 = new Person("Lucy");
+person1.sayName(); // "Lucy"
+```
+
+5. 工厂模式
+
+工厂模式是一种运用广泛的设计模式，用于抽象创建特定对象的过程。如下所示：
+
+```javascript
+function createPerson(name) {
+  let o = new Object();
+  o.name = name;
+  o.sayName = function() {
+    console.log(this.name);
+  };
+  return o;
+}
+
+let person1 = createPerson("Lucy");
+let person2 = createPerson("Joe");
+```
+
+函数 createPerson()接收 1 个参数 name， 根据这个参数创建了一个包含 Person 信息的对象，可以用不同的参数多次调用这个函数，每次都会返回包含 1 个属性和 1 个方法的对象。在 createPerson() 中可以根据实际需求给 Person 对象添加更多属性和方法。
+
+它的优缺点如下：
+
+优点：可以解决创建多个类似对象的问题
+
+缺点：没有解决对象标识问题（即新创建的对象是什么类型，类型如 Array）
+
+6. 构造函数模式
+
+构造函数是用于创建特定类型对象的。像 Object 和 Array 这样的原生构造函数，运行时可以直接在执行环境中使用。我们可以自定义构造函数，以函数的形式为自己的对象类型定义属性和方法。
+
+```javascript
+function Person(name) {
+	this.name = name;
+    this.sayName = function() {
+        console.log(this.name)
+    }
+}
+
+let person1 = new Person("Lucy");
+let person2 = new Person("Joe");
+
+person1.sayName(); // "Lucy"
+person2.sayName(); // "Joe"
+```
+
+7. 原型模式
+
+每个函数都会创建一个 prototype 属性，这个属性是一个对象，包含应该由特定引用类型的实例共享的属性和方法。实际上，这个对象就是通过调用构造函数创建的对象的原型。
+
+使用原型对象的好处是，在它上面定义的属性和方法可以被对象实例共享。
+
+```javascript
+function Person (){}
+Person.prototype.name = "dxy"
+Person.prototype.sayName = function(){
+  console.log(this.name)
+}
+let person1 = new Person();
+person1.sayName(); // "Lucy"
+
+let person2 = new Person();
+person2.sayName(); // "Lucy"
+```
+
+## 事件循环
+
+事件循环是为了解决单线程下异步任务如何被调度而存在的机制
+
+事件循环又叫消息循环 是浏览器 渲染主线程 的工作方式。
+
+在chrome的源码中，他开启一个不会结束的for循环，每次循环从消息队列中取出第一个任务执行，而其他线程只需要在合适的时候将任务加到队列末尾即可。
+
+过去把消息队列简单分为宏队列和微队列，这种说法目前已经无法满足复杂的浏览器环境，取而代之的是一中更加灵活多变的处理方式。
+
+根据w3c的官方解释，每个任务有不同的类型，同类型的任务必须在同一个队列，不同的任务可以属于不同的队列。不同的任务队列有不同的优先级，在一次事件循环中，由浏览器自行决定取哪一个队列的任务。但浏览器必须有一个微队列，微队列的任务一定具有最高的优先级，必须优先调度执行。
+
+![JavaScript 闭包](/assets/14.png)
+
+## 如何理解异步
+
+js是一门单线程的语言 这是因为他运行在浏览器的主线程中 而渲染主线程只有一个，而渲染主线程承担着诸多的工作，渲染页面，执行JS都在其中运行
+
+如果使用同步的方式 就极有可能导致主线程产生阻塞，从而导致消息队列中的很多其他任务无法得到执行，这样一来 一方面会导致繁忙的主线程白白的消耗时间，另一方面导致页面无法及时更新，给用户造成卡死的现象。
+
+所以浏览器是哦也能够异步的方式来避免 具体做法是当某些任务发生时，比如计时器、网络、事件监听。主线程将任务交给其他线程取处理。自身立即结束任务的执行，转而执行后续代码。当其他线程完成时，将事先传递的回调函数包装成任务，加入到消息队列的末尾排队，等待主线程调度执行。
+
+在这种异步模式下，浏览器永不阻塞，从而最大限度的保证了单线程的流畅运行
+
+
+
+
+
+## JS中的计时器能做到精确计时吗
+
+不行，因为：
+
+1. 计算机硬件没有原子钟 无法做到精确计时
+2. 操作系统的计时函数本身就有偏差 由于js的计时器最终调用的就是操作系统的函数 也就携带了这些偏差
+3. 按照w3c的标准 浏览器实现计时器时 如果嵌套层级超过五层 则会有最少4ms的最少时间 这样在计时时间少于4ms的时候又带来了偏差
+4. 受事件循环的影响 计时器的回调函数只能在主线程空闲的时候运行 因此又带来了偏差
+
+## 内存泄漏引起的原因及解决方式
+
+1. 隐式全局变量
+
+```javascript
+function createGlobal() {
+    // 忘记声明变量，导致创建全局变量
+    leakedVariable = "I am a leaked variable";
+    
+    // 使用 this 创建全局变量
+    this.leakedProperty = "I am also leaked";
+}
+```
+
+解决方法：
+
+```javascript
+'use strict'; // 使用严格模式
+
+function createGlobal() {
+    // 正确声明变量
+    let localVariable = "I am a local variable";
+    const constantVariable = "I am a constant";
+    
+    // 如果确实需要全局变量，显式声明
+    window.intentionalGlobal = "I am intentionally global";
+}
+```
+
+1. 未清除的定时器 
+
+```javascript
+class TimerComponent {
+    constructor() {
+        this.data = new Array(10000).fill('some data');
+        // 创建定时器但从未清除
+        this.timer = setInterval(() => {
+            this.doSomething();
+        }, 1000);
+    }
+    
+    doSomething() {
+        console.log(this.data);
+    }
+}
+```
+
+解决方式：
+
+```javascript
+class TimerComponent {
+    constructor() {
+        this.data = new Array(10000).fill('some data');
+        this.startTimer();
+    }
+    
+    startTimer() {
+        this.timer = setInterval(() => {
+            this.doSomething();
+        }, 1000);
+    }
+    
+    // 在组件销毁时清除定时器
+    cleanup() {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
+    
+    doSomething() {
+        console.log(this.data);
+    }
+}
+
+// 使用示例
+const component = new TimerComponent();
+// 当不再需要时
+component.cleanup();
+```
+
+1. 游离dom的引用：
+
+```javascript
+class DOMHandler {
+    constructor() {
+        this.element = document.getElementById('myElement');
+        this.button = document.getElementById('myButton');
+        this.data = new Array(10000).fill('data');
+    }
+    
+    removeElement() {
+        // 从DOM中移除元素，但仍然保持引用
+        this.element.parentNode.removeChild(this.element);
+        // this.element 仍然引用着DOM元素
+    }
+}
+```
+
+解决方法：
+
+```javascript
+class DOMHandler {
+    constructor() {
+        this.element = document.getElementById('myElement');
+        this.button = document.getElementById('myButton');
+        this.data = new Array(10000).fill('data');
+    }
+    
+    removeElement() {
+        // 从DOM中移除元素
+        if (this.element && this.element.parentNode) {
+            this.element.parentNode.removeChild(this.element);
+            // 清除引用
+            this.element = null;
+        }
+    }
+    
+    cleanup() {
+        // 清理所有DOM引用
+        this.element = null;
+        this.button = null;
+    }
+}
+```
+
+1. 闭包导致的内存泄漏
+
+```javascript
+function createLeak() {
+    const largeData = new Array(1000000).fill('some data');
+    
+    return function() {
+        // 这个闭包会一直持有对 largeData 的引用
+        console.log(largeData.length);
+    };
+}
+
+// 创建闭包
+const leak = createLeak();
+```
+
+解决方法：
+
+```javascript
+function betterFunction() {
+    // 只保留需要的数据
+    let data = null;
+    
+    const initialize = () => {
+        data = new Array(1000000).fill('some data');
+    };
+    
+    const cleanup = () => {
+        // 当不再需要时，清除数据
+        data = null;
+    };
+    
+    const processData = () => {
+        if (data) {
+            console.log(data.length);
+        }
+    };
+    
+    return {
+        initialize,
+        cleanup,
+        processData
+    };
+}
+
+// 使用示例
+const handler = betterFunction();
+handler.initialize();
+handler.processData();
+handler.cleanup(); // 当不再需要时清理
+```
+
+## 如何判断属性是否在原型链上
+
+1. 使用 `hasOwnProperty` 方法
+
+`hasOwnProperty` 是一个内置方法，用于判断对象自身是否直接拥有某个属性（而不是通过原型链继承的）。
+
+```javascript
+const obj = {};
+obj.foo = 'bar';
+
+console.log(obj.hasOwnProperty('foo')); // true，表示属性是对象自身的
+console.log(obj.hasOwnProperty('toString')); // false，表示属性是继承自原型链的
+```
+
+如果 `hasOwnProperty` 返回 `false`，说明该属性可能是从原型链上继承的。
+
+2. 遍历原型链
+
+可以通过访问对象的 `__proto__` 或 `Object.getPrototypeOf`，手动遍历原型链来查找属性。
+
+```javascript
+function isInPrototypeChain(obj, key) {
+  let currentProto = Object.getPrototypeOf(obj);
+  while (currentProto !== null) {
+    if (currentProto.hasOwnProperty(key)) {
+      return true;
+    }
+    currentProto = Object.getPrototypeOf(currentProto);
+  }
+  return false;
+}
+
+const obj = {};
+const prototypeKeyFound = isInPrototypeChain(obj, 'toString'); // true
+
+console.log(prototypeKeyFound);
+```
+
+在这个例子中，`isInPrototypeChain` 方法会检查从 `obj` 的原型开始，沿着原型链查找是否存在指定的属性。
+
+3. 使用 `in` 运算符
+
+`in` 运算符会检查对象自身和原型链上的属性。可以结合 `hasOwnProperty` 来判断属性是否在原型链上。
+
+JavaScript**复制**
+
+```javascript
+const obj = {};
+
+// 检查属性是否存在于对象中（包括原型链）
+console.log('toString' in obj); // true
+
+// 检查属性是否存在于原型链上
+console.log(('toString' in obj) && !obj.hasOwnProperty('toString')); // true
+```
+
+4. 检查无原型对象
+
+如果一个对象是通过 `Object.create(null)` 创建的，它没有原型链。因此，这样的对象不会有继承的属性。
+
+JavaScript**复制**
+
+```javascript
+const noProtoObj = Object.create(null);
+console.log(noProtoObj.hasOwnProperty('toString')); // false
+console.log('toString' in noProtoObj); // false
+```
+
+总结
+
+- 如果需要简单判断，直接使用 `hasOwnProperty`。
+- 如果需要确认属性是否在原型链上，可以结合 `in` 运算符或手动遍历原型链。
+- 对于特定场景，可以通过 `Object.getPrototypeOf` 或 `__proto__` 查看原型链的结构。
+
+## 防抖-节流
+
+1. 防抖
+
+```js
+function debounce(fn, time) {
+  let timer;
+  return function (...args) {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      fn.apply(this,...args)
+    }, time)
+  }
+}
+
+export default debounce
+```
+
+通常用于优化那些在短时间内可能被频繁触发的事件（如窗口缩放、滚动、键盘输入等）。
+
+防抖的核心思想是：在事件被触发后，延迟一定时间才执行函数，如果在这段时间内事件再次被触发，则重新计时。
+
+### 代码解析
+
+#### 1. **函数定义**
+```javascript
+function debounce(fn, time) {
+```
+- **`fn`**：需要被防抖处理的函数。
+- **`time`**：延迟时间，单位是毫秒（ms）。表示在事件触发后，需要等待多长时间才执行`fn`。
+
+#### 2. **闭包中的定时器变量**
+```javascript
+  let timer;
+```
+- 在`debounce`函数内部定义了一个变量`timer`，用于存储`setTimeout`返回的定时器ID。
+- 这个变量通过闭包机制被返回的匿名函数所共享，确保每次调用返回的匿名函数都能访问同一个`timer`变量。
+
+#### 3. **返回的匿名函数**
+```javascript
+  return function (...args) {
+```
+- 返回一个新的函数（匿名函数），这个函数可以接收任意数量的参数（通过`...args`收集）。
+- 每次事件触发时，实际上调用的是这个返回的匿名函数。
+
+#### 4. **清除之前的定时器**
+```javascript
+    if (timer) clearTimeout(timer);
+```
+- 在每次事件触发时，先检查是否存在一个正在运行的定时器（`timer`）。
+- 如果存在，则通过`clearTimeout(timer)`清除之前的定时器，避免重复计时。
+
+#### 5. **设置新的定时器**
+```javascript
+    timer = setTimeout(() => {
+      fn.apply(this, ...args);
+    }, time);
+  }
+```
+- 使用`setTimeout`设置一个新的定时器，延迟`time`毫秒后执行`fn`。
+- 在定时器的回调函数中，使用`fn.apply(this, ...args)`调用原始函数`fn`，并将当前上下文（`this`）和参数（`...args`）传递给它。
+- 将新定时器的ID赋值给`timer`，以便后续可能的清除操作。
+
+#### 6. **导出函数**
+```javascript
+export default debounce;
+```
+- 使用`export default`将`debounce`函数导出，使其可以在其他模块中被导入和使用。
+
+### 工作原理
+
+假设你将这个防抖函数应用于一个输入框的`input`事件，代码可能如下：
+```javascript
+const inputHandler = debounce((event) => {
+  console.log(event.target.value);
+}, 300);
+
+document.querySelector('input').addEventListener('input', inputHandler);
+```
+
+- 当用户开始输入时，`input`事件被频繁触发。
+- 每次触发事件时，`debounce`返回的匿名函数被调用。
+- 如果之前已经有一个定时器在运行（即`timer`存在），则清除它。
+- 然后设置一个新的定时器，延迟300毫秒后执行`fn`（即`inputHandler`中的逻辑）。
+- 如果用户在300毫秒内继续输入，之前的定时器被清除，重新计时。
+- 只有当用户停止输入300毫秒后，`fn`才会被真正执行一次。
+
+### 优点
+
+1. **减少性能开销**：
+   - 防止因频繁触发事件而导致的性能问题。例如，避免在用户快速滚动页面时频繁触发`scroll`事件，导致页面卡顿。
+
+2. **优化用户体验**：
+   - 确保在用户操作结束后才执行相关逻辑，避免不必要的中间状态处理。
+
+3. **代码简洁**：
+   - 通过一个通用的`debounce`函数，可以轻松地为任何事件添加防抖功能，而无需每次都手动实现。
+
+### 使用场景
+
+- **输入框搜索**：用户输入时，延迟发送搜索请求。
+- **窗口缩放**：在窗口大小调整时，延迟执行布局调整逻辑。
+- **滚动事件**：在用户滚动页面时，延迟加载内容或执行某些操作。
+
+2. 节流
+
+```js
+function throttle(fn, t) {
+  let timer;
+  return function (...args) { // 使用扩展运算符接收所有参数
+    if (timer) {
+      return; // 如果定时器存在，直接返回
+    }
+    timer = setTimeout(() => {
+      fn.apply(this, args); // 使用 apply 确保 this 指向正确，并传递参数
+      timer = null; // 清除定时器
+    }, t);
+  };
+}
+```
+
+这段代码实现的是一个**节流函数（Throttle Function）**，与防抖函数（Debounce）类似，节流函数也用于优化那些在短时间内可能被频繁触发的事件（如滚动、窗口缩放、鼠标移动等）。不过，节流函数的核心思想是：在指定的时间间隔内，最多只执行一次目标函数，而不是像防抖函数那样延迟执行。
+
+### 代码解析
+
+#### 1. **函数定义**
+```javascript
+function throttle(fn, t) {
+```
+- **`fn`**：需要被节流处理的函数。
+- **`t`**：时间间隔，单位是毫秒（ms）。表示在指定的时间间隔内，最多只执行一次`fn`。
+
+#### 2. **闭包中的定时器变量**
+```javascript
+  let timer;
+```
+- 在`throttle`函数内部定义了一个变量`timer`，用于存储`setTimeout`返回的定时器ID。
+- 这个变量通过闭包机制被返回的匿名函数所共享，确保每次调用返回的匿名函数都能访问同一个`timer`变量。
+
+#### 3. **返回的匿名函数**
+```javascript
+  return function (...args) {
+```
+- 返回一个新的函数（匿名函数），这个函数可以接收任意数量的参数（通过`...args`收集）。
+- 每次事件触发时，实际上调用的是这个返回的匿名函数。
+
+#### 4. **检查定时器是否存在**
+```javascript
+    if (timer) {
+      return; // 如果定时器存在，直接返回
+    }
+```
+- 在每次事件触发时，先检查是否存在一个正在运行的定时器（`timer`）。
+- 如果存在，则直接返回，不执行任何操作。这确保了在指定的时间间隔内，函数不会被重复执行。
+
+#### 5. **设置新的定时器**
+```javascript
+    timer = setTimeout(() => {
+      fn.apply(this, args); // 使用 apply 确保 this 指向正确，并传递参数
+      timer = null; // 清除定时器
+    }, t);
+  };
+```
+- 使用`setTimeout`设置一个新的定时器，延迟`t`毫秒后执行`fn`。
+- 在定时器的回调函数中，使用`fn.apply(this, args)`调用原始函数`fn`，并将当前上下文（`this`）和参数（`args`）传递给它。
+- 调用完成后，将`timer`设置为`null`，以便下一次事件触发时可以重新设置定时器。
+
+### 工作原理
+
+假设你将这个节流函数应用于一个窗口的`scroll`事件，代码可能如下：
+```javascript
+const scrollHandler = throttle(() => {
+  console.log(window.scrollY);
+}, 300);
+
+window.addEventListener('scroll', scrollHandler);
+```
+
+- 当用户开始滚动页面时，`scroll`事件被频繁触发。
+- 每次触发事件时，`throttle`返回的匿名函数被调用。
+- 如果之前已经有一个定时器在运行（即`timer`存在），则直接返回，不执行任何操作。
+- 如果没有正在运行的定时器，则设置一个新的定时器，延迟300毫秒后执行`fn`。
+- 300毫秒后，`fn`被调用一次，打印当前滚动位置。
+- 调用完成后，定时器被清除（`timer = null`），下一次滚动事件触发时可以重新设置定时器。
+
+### 优点
+
+1. **减少性能开销**：
+   - 防止因频繁触发事件而导致的性能问题。例如，避免在用户快速滚动页面时频繁触发`scroll`事件，导致页面卡顿。
+
+2. **优化用户体验**：
+   - 确保在指定的时间间隔内，最多只执行一次目标函数，避免不必要的重复计算。
+
+3. **代码简洁**：
+   - 通过一个通用的`throttle`函数，可以轻松地为任何事件添加节流功能，而无需每次都手动实现。
+
+### 使用场景
+
+- **滚动事件**：在用户滚动页面时，节流处理滚动事件，减少性能开销。
+- **窗口缩放**：在窗口大小调整时，节流处理布局调整逻辑。
+- **鼠标移动**：在鼠标移动时，节流处理鼠标位置相关的逻辑。
+
+### 防抖与节流的区别
+
+- **防抖（Debounce）**：
+  - **原理**：延迟执行，直到事件停止触发一段时间后才执行。
+  - **适用场景**：适用于需要在事件完全停止后才执行的场景，如输入框搜索、窗口缩放等。
+
+- **节流（Throttle）**：
+  - **原理**：在指定的时间间隔内，最多只执行一次。
+  - **适用场景**：适用于需要在事件频繁触发时，定期执行某些操作的场景，如滚动事件、鼠标移动等。
+
+### 总结
+
+这段代码实现了一个非常实用的节流功能，广泛应用于前端开发中，用于优化事件处理逻辑。通过合理使用节流和防抖函数，可以显著提升应用的性能和用户体验。
+
+## 懒加载
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>懒加载</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    .box {
+      width: 200px;
+      height: 2000px;
+      background-color: rgb(25, 135, 38);
+      overflow: auto;
+    }
+
+    .numberBox {
+      height: 200px;
+      margin: 5px 5px;
+      background-color: #e92929;
+    }
+
+    .container {
+      display: flex;
+      background-color: pink;
+    }
+
+    .headSearch {
+      width: 100%;
+      height: 55px;
+      background-color: orange;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      position: fixed;
+    }
+
+    .logo {
+      height: 100%;
+      width: 80px;
+    }
+
+    .searchInput {
+      height: 50%;
+    }
+
+    img {
+      width: 100%;
+      height: 100%;
+    }
+
+    .buttonC {
+      margin-top: 100px;
+    }
+
+    .main {
+      display: flex;
+    }
+
+    .lazy-load {
+      margin-top: 1550px;
+      width: 400px;
+      height: 300px;
+    }
+
+    .aim {
+      margin-top: 1550px;
+      width: 400px;
+      height: 300px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <div class="headSearch">
+      <div class="logo"><img
+          src="https://img.alicdn.com/imgextra/i3/O1CN01LvV0d41fjkGWg6iN6_!!6000000004043-2-tps-480-144.png" alt="">
+      </div>
+      <input type="text" value="请输入搜索的商品" class="searchInput">
+    </div>
+
+    <div class="box">
+      <button class="buttonC">确认</button>
+    </div>
+
+    <div class="main">
+      <img class="lazy-load aim"
+        data-src="https://gw.alicdn.com/imgextra/O1CN017yvPeK1D9jwfbbzH9_!!3876280174-0-yinheaigc.jpg_360x360q90.jpg_.webp"
+        alt="">
+    </div>
+  </div>
+
+
+  <script>
+    // //获取numberbox 
+    // let box = document.querySelector(".numberBox")
+    // for (let i = 0; i < 5; i++) {
+    //   box.appendChild()
+    // }
+
+    function isInViewport(img) {
+      const imgbox = img.getBoundingClientRect();
+      return imgbox.top >= 0 && imgbox.bottom <= window.innerHeight
+    }
+
+    function lazyLoadImages() {
+      const images = document.querySelectorAll(".lazy-load")
+      images.forEach((img) => {
+        if (isInViewport(img)) {
+          //  img.src = img.getAttribute("data-src");
+          img.src = img.dataset.src
+          //移除懒加载类
+          img.classList.remove('lazy-load')
+        }
+      })
+    }
+    // 初始化懒加载
+    window.addEventListener('scroll', lazyLoadImages);
+    window.addEventListener('resize', lazyLoadImages); // 在窗口大小变化时也检查图片
+
+    // 页面加载时检查一次
+    window.addEventListener('load', lazyLoadImages);
+    
+    const observer = new IntersectionObserver((entries, observer) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const img = entry.target
+          img.src = img.getAttribute('data-src');
+          img.classList.remove('lazy-load');
+          observer.unobserve(img); // 图片加载后停止观察
+        }
+      })
+    }, { threshold: 0.1 })
+
+    // 为所有懒加载的图片添加观察
+    document.querySelectorAll('lazy-load').forEach(img => {
+      observer.observe(img);
+    });
+
+  </script>
+
+</body>
+
+</html>
+```
+
+这段代码中实现了两种懒加载（Lazy Loading）的方式。这两种方式分别是：
+
+1. **基于滚动事件和窗口大小变化的懒加载**
+2. **使用`IntersectionObserver`的懒加载**
+
+下面分别对这两种实现方式进行详细解释：
+
+---
+
+### 1. **基于滚动事件和窗口大小变化的懒加载**
+
+这部分代码的核心逻辑是通过监听滚动事件（`scroll`）和窗口大小变化事件（`resize`），在用户滚动页面或调整窗口大小时检查图片是否进入可视区域（viewport），如果是，则加载图片。
+
+#### 代码分析：
+```javascript
+function isInViewport(img) {
+  const imgbox = img.getBoundingClientRect();
+  return imgbox.top >= 0 && imgbox.bottom <= window.innerHeight;
+}
+
+function lazyLoadImages() {
+  const images = document.querySelectorAll(".lazy-load");
+  images.forEach((img) => {
+    if (isInViewport(img)) {
+      img.src = img.dataset.src; // 加载图片
+      img.classList.remove('lazy-load'); // 移除懒加载类
+    }
+  });
+}
+
+// 初始化懒加载
+window.addEventListener('scroll', lazyLoadImages);
+window.addEventListener('resize', lazyLoadImages);
+window.addEventListener('load', lazyLoadImages);
+```
+
+- **`isInViewport`函数**：
+  - 通过`getBoundingClientRect()`方法获取图片元素的边界框信息。
+  - 判断图片是否完全在可视区域内（`imgbox.top >= 0 && imgbox.bottom <= window.innerHeight`）。
+
+- **`lazyLoadImages`函数**：
+  - 查询所有带有`lazy-load`类的图片。
+  - 遍历这些图片，调用`isInViewport`函数检查它们是否在可视区域内。
+  - 如果在可视区域内，则将`data-src`属性的值赋给`src`属性，从而加载图片，并移除`lazy-load`类。
+
+- **事件监听**：
+  - 监听`scroll`事件：当用户滚动页面时，调用`lazyLoadImages`函数。
+  - 监听`resize`事件：当用户调整窗口大小时，调用`lazyLoadImages`函数。
+  - 监听`load`事件：在页面加载完成后，调用`lazyLoadImages`函数，确保页面加载时就检查图片是否需要加载。
+
+---
+
+### 2. **使用`IntersectionObserver`的懒加载**
+
+`IntersectionObserver`是一种现代的、性能更优的懒加载实现方式。它允许开发者监听元素是否进入或离开可视区域，而无需手动监听滚动事件。
+
+#### 代码分析：
+```javascript
+const observer = new IntersectionObserver((entries, observer) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      const img = entry.target;
+      img.src = img.getAttribute('data-src'); // 加载图片
+      img.classList.remove('lazy-load'); // 移除懒加载类
+      observer.unobserve(img); // 图片加载后停止观察
+    }
+  });
+}, { threshold: 0.1 });
+
+// 为所有懒加载的图片添加观察
+document.querySelectorAll('.lazy-load').forEach(img => {
+  observer.observe(img);
+});
+```
+
+- **`IntersectionObserver`构造函数**：
+  - 创建一个`IntersectionObserver`实例，传入一个回调函数和配置对象。
+  - 回调函数会在目标元素与交集区域（viewport）相交时被调用。
+  - 配置对象`{ threshold: 0.1 }`表示当目标元素有10%进入可视区域时触发回调。
+
+- **回调函数**：
+  - 遍历`entries`（被观察的目标元素列表）。
+  - 如果目标元素进入可视区域（`entry.isIntersecting`为`true`），则加载图片（将`data-src`的值赋给`src`），移除`lazy-load`类，并停止观察该元素（`observer.unobserve(img)`）。
+
+- **观察图片**：
+  - 查询所有带有`lazy-load`类的图片，并使用`observer.observe(img)`将它们加入观察。
+
+---
+
+### 两种方式的对比
+
+#### **性能**
+- **滚动事件监听**：
+  - 传统的懒加载方式依赖于`scroll`事件，每次滚动都会触发`lazyLoadImages`函数，可能会导致性能问题，尤其是在图片较多的情况下。
+  - 需要手动检查每个图片是否在可视区域内，计算成本较高。
+
+- **`IntersectionObserver`**：
+  - 现代的懒加载方式，性能更优。
+  - 浏览器内部优化了对元素进入/离开可视区域的检测，减少了不必要的计算。
+  - 不需要手动监听`scroll`事件，减少了事件处理的开销。
+
+#### **代码复杂度**
+- **滚动事件监听**：
+  - 实现相对简单，易于理解。
+  - 需要手动处理滚动、窗口大小变化和页面加载等事件。
+
+- **`IntersectionObserver`**：
+  - 实现稍复杂，但代码更加简洁。
+  - 提供了更强大的功能，如自定义阈值和根元素。
+
+#### **兼容性**
+- **滚动事件监听**：
+  - 兼容性非常好，几乎所有现代浏览器都支持。
+
+- **`IntersectionObserver`**：
+  - 现代浏览器支持良好，但在一些老旧浏览器中可能不支持。
+
+---
+
+### 总结
+这段代码中确实实现了两种懒加载方式，各有优缺点。在实际开发中，推荐使用`IntersectionObserver`，因为它性能更好、代码更简洁。如果需要支持老旧浏览器，可以结合使用两种方式，或者使用`IntersectionObserver`的polyfill。
+
+## 深拷贝
+
+```js
+//深拷贝
+function deepCopy(newObj,oldObj){
+  for(let k in oldObj){
+    if(oldObj[k] instanceof Array){
+      newObj[k] = [];
+      deepCopy(newObj[k],oldObj[k]);
+    }else if(oldObj[k] instanceof Object){
+      newObj[k] = {};
+      deepCopy(newObj[k],oldObj[k]);
+    }else{
+      newObj[k] = oldObj[k];
+    }
+  }
+}
+```
+
+---
+
+### 1. **深拷贝代码解析**
+
+#### 函数定义
+```javascript
+function deepCopy(newObj, oldObj) {
+```
+- **`newObj`**：目标对象，用于存放复制后的数据。
+- **`oldObj`**：源对象，需要被复制的对象。
+
+#### 遍历源对象的属性
+```javascript
+  for (let k in oldObj) {
+```
+- 使用`for...in`循环遍历`oldObj`的所有可枚举属性（包括继承的属性）。如果需要仅遍历自身属性，可以结合`Object.keys(oldObj)`使用。
+
+#### 判断属性值的类型
+```javascript
+    if (oldObj[k] instanceof Array) {
+      newObj[k] = [];
+      deepCopy(newObj[k], oldObj[k]);
+    } else if (oldObj[k] instanceof Object) {
+      newObj[k] = {};
+      deepCopy(newObj[k], oldObj[k]);
+    } else {
+      newObj[k] = oldObj[k];
+    }
+  }
+```
+- **数组类型**：
+  - 如果`oldObj[k]`是一个数组（`instanceof Array`），则在`newObj`中创建一个新的空数组`[]`。
+  - 递归调用`deepCopy`，将`oldObj[k]`中的内容复制到`newObj[k]`中。
+
+- **对象类型**：
+  - 如果`oldObj[k]`是一个对象（`instanceof Object`），则在`newObj`中创建一个新的空对象`{}`。
+  - 递归调用`deepCopy`，将`oldObj[k]`中的内容复制到`newObj[k]`中。
+
+- **其他类型**：
+  - 如果`oldObj[k]`既不是数组也不是对象（如字符串、数字、布尔值等），则直接将值赋给`newObj[k]`。
+
+---
+
+### 2. **使用`JSON.parse(JSON.stringify(obj))`实现深拷贝**
+
+`JSON.parse(JSON.stringify(obj))`是一种常见的实现深拷贝的简便方法，但这种方法有一些限制：
+
+#### 实现原理
+```javascript
+const newObj = JSON.parse(JSON.stringify(oldObj));
+```
+- **`JSON.stringify(obj)`**：
+  - 将对象序列化为一个JSON字符串。这个过程会递归地遍历对象的所有属性，将它们转换为字符串形式。
+  - 注意：序列化过程中会忽略函数、`undefined`、循环引用等。
+
+- **`JSON.parse(str)`**：
+  - 将JSON字符串反序列化为一个新的对象。这个过程会重新构建对象的结构，确保新对象与原对象在结构上完全独立。
+
+#### 优点
+- **简单易用**：一行代码即可实现深拷贝。
+- **性能较好**：对于大多数简单对象，这种方法的性能表现良好。
+
+#### 缺点
+1. **无法处理函数**：
+   - 如果对象中包含函数，这些函数会被忽略，不会出现在新对象中。
+   - 示例：
+     ```javascript
+     const obj = { sayHello: function() { console.log("Hello!"); } };
+     const newObj = JSON.parse(JSON.stringify(obj));
+     console.log(newObj.sayHello); // undefined
+     ```
+
+2. **无法处理循环引用**：
+   - 如果对象中存在循环引用（如对象引用自身），`JSON.stringify`会抛出错误。
+   - 示例：
+     ```javascript
+     const obj = {};
+     obj.self = obj;
+     JSON.stringify(obj); // TypeError: Converting circular structure to JSON
+     ```
+
+3. **忽略`undefined`**：
+   - 如果对象的属性值为`undefined`，这些属性在序列化时会被忽略。
+   - 示例：
+     ```javascript
+     const obj = { a: undefined, b: 2 };
+     const newObj = JSON.parse(JSON.stringify(obj));
+     console.log(newObj.a); // undefined，但`a`属性本身也会丢失
+     ```
+
+4. **忽略特殊对象类型**：
+   - 一些特殊对象类型（如`Date`、`RegExp`、`Map`、`Set`等）会被转换为普通对象或字符串。
+   - 示例：
+     ```javascript
+     const obj = { date: new Date() };
+     const newObj = JSON.parse(JSON.stringify(obj));
+     console.log(newObj.date); // "2025-11-12T08:00:00.000Z"，变成了字符串
+     ```
+
+---
+
+### 3. **对比两种实现方式**
+
+#### 自定义`deepCopy`函数
+- **优点**：
+  - **灵活性高**：可以自定义处理函数、循环引用、特殊对象类型等。
+  - **兼容性好**：不会因为特殊类型或结构而抛出错误。
+
+- **缺点**：
+  - **实现复杂**：需要手动处理各种边界情况，代码较长。
+  - **性能稍差**：递归调用可能会导致性能问题，尤其是在处理复杂对象时。
+
+#### `JSON.parse(JSON.stringify(obj))`
+- **优点**：
+  - **简单高效**：一行代码即可实现，性能较好。
+  - **易于理解**：对于大多数简单对象，这种方法足够使用。
+
+- **缺点**：
+  - **功能受限**：无法处理函数、循环引用、特殊对象类型等。
+  - **可能丢失数据**：如`undefined`、函数等会被忽略或转换。
+
+---
+
+### 4. **总结**
+
+- 如果你的对象结构简单，不包含函数、循环引用或特殊对象类型，可以使用`JSON.parse(JSON.stringify(obj))`实现深拷贝，因为它简单高效。
+- 如果你的对象结构复杂，需要处理函数、循环引用或特殊对象类型，建议使用自定义的`deepCopy`函数，并根据需求进行扩展和优化。
+
+## 拖拽
+
+#### 简单拖拽
+
+```jsx
+let initialX, initialY;
+element.addEventListener('mousedown', (e) => {
+  const rect = element.getBoundingClientRect();
+  initialX = e.clientX - rect.left; // 鼠标相对于元素左边界的位置
+  initialY = e.clientY - rect.top;
+});
+
+document.addEventListener('mousemove', (e) => {
+  // 根据鼠标位置更新元素坐标
+  element.style.left = `${e.clientX - initialX}px`;
+  element.style.top = `${e.clientY - initialY}px`;
+});
+```
+
+framemotion
+
+```jsx
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
+import { DragOutlined } from '@ant-design/icons';
+import Detail from './detail';
+import AIImg from '/assets/aiLogo.png'
+import useUserStore from './store';
+import './index.css'
+import { motion } from 'framer-motion';
+
+// 定义排除的路径列表 - 新增 /ai 路由
+const excludeUrls = ['/login', '/register', '/404', '/ai'];
+
+/**
+ * AI 聊天组件
+ * @param {string} mode - 显示模式：'modal'(模态框) 或 'fullscreen'(全屏)
+ */
+const AI = ({ mode = 'modal' }) => {
+  const [visible, setVisible] = useState(false);
+  const { pathname } = useLocation();
+  const { open, updates } = useUserStore();
+  const constraintsRef = useRef(null); // 用于设置拖拽约束的ref
+  const [isDragging, setIsDragging] = useState(false); // 拖拽状态
+
+  useEffect(() => {
+    if (mode === 'fullscreen') {
+      // 全屏模式下不需要检查路径，始终显示
+      setVisible(true);
+    } else {
+      // 模态框模式下检查当前路径是否允许显示组件
+      const shouldShow = !excludeUrls.some(url => pathname.includes(url));
+      setVisible(shouldShow);
+    }
+  }, [pathname, mode]);
+
+  /**
+   * 处理AI图标点击事件
+   */
+  const handleAIClick = () => {
+    // 只有在非拖拽状态下才响应点击
+    if (!isDragging) {
+      updates({ open: { visible: true } });
+    }
+  };
+
+  /**
+   * 处理拖拽开始事件
+   */
+  const handleDragStart = () => {
+    setIsDragging(true);
+  };
+
+  /**
+   * 处理拖拽结束事件
+   */
+  const handleDragEnd = () => {
+    // 延迟重置拖拽状态，避免点击事件被误触发
+    setTimeout(() => {
+      setIsDragging(false);
+    }, 100);
+  };
+
+  // 如果不应该显示，直接返回 null
+  if (!visible) return null;
+
+  return createPortal(
+    <div>
+      {/* 设置拖拽约束容器 - 仅在模态框模式下显示 */}
+      {mode === 'modal' && (
+        <div 
+          ref={constraintsRef}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            pointerEvents: 'none', // 让容器不阻挡其他元素的交互
+            zIndex: 9999
+          }}
+        >
+          {/* 当对话框打开时隐藏图标 */}
+          {!open.visible && (
+            <motion.div
+              drag
+              dragConstraints={constraintsRef} // 使用ref作为约束
+              dragElastic={0.1} // 弹性效果
+              dragMomentum={false} // 禁用拖拽惯性
+              onDragStart={handleDragStart} // 拖拽开始
+              onDragEnd={handleDragEnd} // 拖拽结束
+              initial={{ x: window.innerWidth - 120, y: window.innerHeight - 120 }} // 设置初始位置
+              style={{
+                position: 'absolute',
+                width: 80,
+                height: 80,
+                pointerEvents: 'auto', // 恢复交互能力
+              }}
+            >
+              {/* 拖拽句柄 - 位于右上角 */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: -8,
+                  right: -8,
+                  width: 24,
+                  height: 24,
+                  backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'grab',
+                  zIndex: 1,
+                  border: '2px solid white',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                  pointerEvents: 'none' // 让句柄不阻挡拖拽
+                }}
+              >
+                <DragOutlined 
+                  style={{ 
+                    color: 'white', 
+                    fontSize: '12px',
+                    pointerEvents: 'none'
+                  }} 
+                />
+              </div>
+
+              {/* AI图标 - 负责点击，但不阻挡拖拽 */}
+              <img
+                className='w-[80px] h-[80px] cursor-pointer rounded-full hover:scale-110 transition-transform duration-200'
+                src={AIImg}
+                alt="AI助手"
+                onClick={handleAIClick} // 点击打开对话框
+                draggable={false} // 禁用原生拖拽
+                style={{
+                  pointerEvents: isDragging ? 'none' : 'auto' // 拖拽时禁用点击
+                }}
+              />
+            </motion.div>
+          )}
+        </div>
+      )}
+      
+      {/* 传递 mode 参数给 Detail 组件 */}
+      <Detail mode={mode} />
+    </div>,
+    document.body
+  );
+};
+
+export default AI;
+```
+
+dnd-kit实现
+
+```js
+https://blog.csdn.net/qq_62352333/article/details/139939626?ops_request_misc=&request_id=&biz_id=102&utm_term=dndkit&utm_medium=distribute.pc_search_result.none-task-blog-2~all~sobaiduweb~default-0-139939626.142^v102^pc_search_result_base3&spm=1018.2226.3001.4187
+```
+
+## 原型 原型链
+
+![JavaScript 闭包](/assets/15.png)
+
+原型用来处理构造函数中有些函数浪费内存的问题 放在原型链上会节省内存
+
+- `__proto__` 是**非标准属性**，仅用于调试或老代码，不推荐在生产环境使用
+- `Object.getPrototypeOf()` 是 ES5 标准方法，更安全、推荐使用
+
+| 方法                         | 作用                     | 推荐   |
+| ---------------------------- | ------------------------ | ------ |
+| `Object.getPrototypeOf(obj)` | 获取对象的原型           | 推荐   |
+| `obj.__proto__`              | 获取对象的原型（非标准） | 不推荐 |
+
+- **回答**：JS中的原型是每个对象的一个内置属性`__proto__`，指向其构造函数的`prototype`对象；原型链是对象通过原型逐级向上查找属性和方法的链条，直到找到或到达`null`为止。
+
+```javascript
+function Person(name) {
+  this.name = name;
+}
+//Person.protype.constructor===Person 
+Person.prototype.greet = function() {
+  console.log('Hello, ' + this.name);
+};
+
+const john = new Person('John');
+john.greet();  // 输出：'Hello, John'
+```
+
+
+
+在这个例子中：
+
+- `Person` 函数有一个 `prototype` 属性，它指向一个对象，这个对象包含了 `greet` 方法。
+- `john` 对象有一个隐藏的 `__proto__` 属性，它指向 `Person.prototype`。
+- 当我们调用 `john.greet()` 时，JavaScript 会在 `john` 对象上查找 `greet` 方法。如果没有找到，它会沿着 `__proto__` 链向上查找，直到找到 `Person.prototype` 上的 `greet` 方法。
+
+它们允许对象共享方法和属性，而不需要在每个对象上都重新定义它们
+
+在 JavaScript 中，当我们说一个对象的“原型”，我们通常是指这个对象的内部属性 `[[Prototype]]` 指向的对象。在我提供的例子中，`john` 的原型是 `Person.prototype`，而不是 `Person` 函数本身。
+
+- 流程：
+
+① 当访问一个对象的属性（包括方法）时，首先查找这个对象自身有没有该属性。
+
+**② 如果没有就查找它的原型（也就是 __proto__指向的 prototype 原型对象）**
+
+**③ 如果还没有就查找原型对象的原型（Object的原型对象）**
+
+**④ 依此类推一直找到 Object 为止（null）**
+
+**⑤ __proto__对象原型的意义就在于为对象成员查找机制提供一个方向，或者说一条路线**
+
+**⑥ 可以使用 instanceof 运算符用于检测构造函数的 prototype 属性是否出现在某个实例对象的原型链上**
+
+## 手写new
+
+```tsx
+function _new(Constructor, ...args) {
+  // 1. 创建一个全新的空对象，并把它的原型指向构造函数的原型
+  const instance = Object.create(Constructor.prototype);
+  //const obj = {}
+  //obj.__proto__ = Constructor.prototype
+    
+  // 2. 以这个新对象为 this 执行构造函数 也就是把构造函数的this指向指到新对象上带上参数执行一遍
+  const result = Constructor.apply(instance, args);
+
+  // 3. 如果构造函数显式返回了一个对象/函数，则优先使用它；否则返回新对象
+  return (typeof result === 'object' && result !== null) || typeof result === 'function'
+         ? result
+         : instance;
+}
+```
+
+就是第一步是创建了一个空的对象 然后让空的对象的-proto-指向构造函数的原型对象 使得它可以继承构造函数的原型链上的方法 然后第二步就是改变构造函数的this指向到空对象 使得原来是构造函数.name = name 变为新对象.name = name 然后第二个参数是构造函数的参数 第三步就是防止如果构造函数有返回值 那就返回返回值 如果没有 就返回对象instance
