@@ -23,7 +23,26 @@
       "Bash(mv repo *)",
       "Bash(rm -rf repo_old)",
       "Bash(rm -rf docs)",
-      "Bash(mv app/docs docs)"
+      "Bash(mv app/docs docs)",
+      "Bash(mkdir -p /home/xy/code-gh/my-docs-website/app/content)",
+      "Bash(mv /home/xy/code-gh/my-docs-website/app/\\\\[\\\\[...mdxPath\\\\]\\\\] /home/xy/code-gh/my-docs-website/app/content/)",
+      "Bash(npx next *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3099/content)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/content)",
+      "Bash(kill 9704)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} redirect:%{redirect_url}\" -L http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/content/core/JavaScript)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"root: %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"/content: %{http_code}\\\\n\" http://localhost:3000/content)",
+      "Bash(curl -s -o /dev/null -w \"/content/core/JavaScript: %{http_code}\\\\n\" http://localhost:3000/content/core/JavaScript)",
+      "Read(//sys/devices/system/cpu/cpufreq/policy0/**)",
+      "Bash(sensors)",
+      "Bash(lsmod)",
+      "Bash(modprobe -n -v k10temp)",
+      "Read(//etc/**)",
+      "Bash(sensors-detect --auto)",
+      "Bash(sudo apt *)"
     ]
   }
 }

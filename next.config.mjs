@@ -5,4 +5,12 @@ const withNextra = nextra({
   contentDirBasePath: '/content',
 })
 
-export default withNextra()
+export default withNextra({
+  redirects: () => [
+    {
+      source: '/',
+      destination: '/content',
+      permanent: true
+    }
+  ]
+})
