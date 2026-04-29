@@ -17,7 +17,7 @@ function Model() {
 
     // Scene setup
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x1a1a1a)
+    scene.background = null // Transparent background
 
     // Camera
     const camera = new THREE.PerspectiveCamera(
@@ -29,7 +29,10 @@ function Model() {
     camera.position.set(0, 1, 3)
 
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true, // Enable transparency
+    })
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight)
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -60,24 +63,6 @@ function Model() {
     const rimLight = new THREE.DirectionalLight(0xffffee, 0.8)
     rimLight.position.set(0, 5, -10)
     scene.add(rimLight)
-
-    // Ground
-    const groundGeometry = new THREE.CircleGeometry(5, 64)
-    const groundMaterial = new THREE.MeshStandardMaterial({
-      color: 0x2a2a2a,
-      roughness: 0.8,
-      metalness: 0.2,
-    })
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial)
-    ground.rotation.x = -Math.PI / 2
-    ground.position.y = -1
-    ground.receiveShadow = true
-    scene.add(ground)
-
-    // Grid helper
-    const gridHelper = new THREE.GridHelper(10, 20, 0x444444, 0x333333)
-    gridHelper.position.y = -0.99
-    scene.add(gridHelper)
 
     // Model reference
     let loadedModel: THREE.Object3D | null = null
@@ -189,6 +174,7 @@ function Model() {
         borderRadius: '8px',
         overflow: 'hidden',
         cursor: 'grab',
+        backgroundColor: 'transparent',
       }}
     />
   )
@@ -210,7 +196,7 @@ export default function ModelViewer() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#1a1a1a',
+          backgroundColor: 'transparent',
           borderRadius: '8px',
           color: '#ffffff',
         }}
