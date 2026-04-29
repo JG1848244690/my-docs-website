@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(pnpm add *)",
+      "Bash(pnpm dev *)",
+      "Read(//c/Users/xy/AppData/Local/Temp/claude/d--code-gh-my-docs-website/a06df725-2a70-44a9-92c4-b6e34e9edac8/tasks/**)"
     ]
   }
 }
