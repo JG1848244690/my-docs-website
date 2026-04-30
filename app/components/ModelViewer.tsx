@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 
 function Model() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -69,8 +69,10 @@ function Model() {
     let loadedModel: THREE.Object3D | null = null
 
     // Loader
+    const dracoLoader = new DRACOLoader()
+    dracoLoader.setDecoderPath('/draco/')
     const loader = new GLTFLoader()
-    loader.setMeshoptDecoder(MeshoptDecoder)
+    loader.setDRACOLoader(dracoLoader)
     loader.load(
       '/models/f8ad5b640f0ffd506323ce0f73e12a42.glb',
       (gltf) => {

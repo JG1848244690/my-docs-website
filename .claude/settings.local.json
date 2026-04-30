@@ -67,7 +67,10 @@
       "Bash(npx gltf-transform *)",
       "Bash(npx gltf-transform@latest --version)",
       "Bash(pnpm dlx *)",
-      "Bash(pnpm gltf-transform *)"
+      "Bash(pnpm gltf-transform *)",
+      "Bash(git checkout *)",
+      "Bash(git show *)",
+      "Read(//tmp/**)"
     ]
   }
 }
