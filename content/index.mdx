@@ -1,23 +1,156 @@
 ---
-title: Welcome
-description: Welcome to my docs
+title: 时间基 vs 帧基动画对比
+description: requestAnimationFrame 动画模式对比
 ---
 
+import FrameBasedModelViewer from '../app/components/FrameBasedModelViewer.tsx'
 import ModelViewer from '../app/components/ModelViewer.tsx'
 
-# 鸭喆 (Ya Zhe)
+# 时间基 vs 帧基动画对比
 
-<div style={{ padding: '20px 0' }}>
-  <ModelViewer />
+## 实际对比
+
+左边是**帧基动画**（固定每帧 +0.008 弧度），右边是**时间基动画**（1.5 弧度/秒）。
+
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+  <div>
+    <h3 style={{ textAlign: 'center', color: '#ef4444' }}>帧基动画 (Frame-based)</h3>
+    <FrameBasedModelViewer />
+    <div style={{ textAlign: 'center', fontSize: '14px', color: '#888' }}>
+      60Hz: 1.3秒/圈 | 120Hz: 0.65秒/圈
+    </div>
+  </div>
+  <div>
+    <h3 style={{ textAlign: 'center', color: '#22c55e' }}>时间基动画 (Time-based)</h3>
+    <ModelViewer />
+    <div style={{ textAlign: 'center', fontSize: '14px', color: '#888' }}>
+      任何刷新率: 约4.2秒/圈
+    </div>
+  </div>
 </div>
 
-Welcome to my documentation site!
+## 核心区别
 
-## Topics
+### 帧基动画
 
-- [React](/react)
-- [Core](/core)
-- [Guides](/guides)
-- [Engineering](/engineering)
-- [Next.js](/nextjs)
-- [Practice](/practice)
+```javascript
+// 每帧旋转固定角度
+const autoRotationSpeed = 0.008 // 弧度/帧
+
+function animate() {
+  requestAnimationFrame(animate)
+
+  loadedModel.rotation.y += autoRotationSpeed
+  renderer.render(scene, camera)
+}
+```
+
+**问题**：
+- 60Hz 屏幕：每秒旋转约 0.48 弧度
+- 120Hz 屏幕：每秒旋转约 0.96 弧度（**速度翻倍**）
+
+### 时间基动画
+
+```javascript
+// 根据实际时间间隔计算旋转量
+const autoRotationSpeed = 1.5 // 弧度/秒
+let lastTime = performance.now()
+
+function animate() {
+  requestAnimationFrame(animate)
+
+  const currentTime = performance.now()
+  const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1) // 封顶 100ms
+  lastTime = currentTime
+
+  loadedModel.rotation.y += autoRotationSpeed * deltaTime
+  renderer.render(scene, camera)
+}
+```
+
+---
+
+## 关键代码对比
+
+### 帧基版本
+
+```javascript
+let animationId: number
+const autoRotationSpeed = 0.008 // 固定每帧旋转量
+
+const animate = () => {
+  animationId = requestAnimationFrame(animate)
+
+  if (loadedModel) {
+    loadedModel.rotation.y += autoRotationSpeed
+  }
+  renderer.render(scene, camera)
+}
+animate()
+```
+
+### 时间基版本
+
+```javascript
+let animationId: number
+let lastTime = performance.now()
+const autoRotationSpeed = 1.5 // 弧度/秒
+
+const animate = () => {
+  animationId = requestAnimationFrame(animate)
+
+  const currentTime = performance.now()
+  const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1) // 封顶 100ms
+  lastTime = currentTime
+
+  if (loadedModel) {
+    loadedModel.rotation.y += autoRotationSpeed * deltaTime
+  }
+  renderer.render(scene, camera)
+}
+animate()
+```
+
+---
+
+## 时间基的额外保护
+
+```javascript
+const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1)
+```
+
+`Math.min(..., 0.1)` 封顶非常重要：
+
+1. **标签页切换**：用户切走时 rAF 暂停，切回来时时间差可能很大
+2. **显示器刷新率切换**：外接显示器从 60Hz 切换到 144Hz
+3. **系统休眠唤醒**：长时间休眠后恢复
+
+---
+
+## 适用场景
+
+| 场景 | 推荐方式 | 原因 |
+|------|---------|------|
+| 3D 模型旋转 | 时间基 | 需要一致的速度体验 |
+| 游戏动画 | 时间基 | 物理模拟依赖真实时间 |
+| UI 微交互 | 帧基可接受 | 轻微速度差异不明显 |
+| 数据可视化图表 | 时间基 | 需要精确的动画时长 |
+
+---
+
+## 总结
+
+```javascript
+// ❌ 帧基 - 速度依赖刷新率
+rotation += 0.008
+
+// ✅ 时间基 - 速度恒定
+const deltaTime = (currentTime - lastTime) / 1000
+rotation += speed * deltaTime
+
+// ⚠️ 时间基 + 封顶 - 防止标签页切换后跳跃
+const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1)
+rotation += speed * deltaTime
+```
+
+**结论**：除非明确知道动画不需要恒定速度，否则都应该使用时间基动画。

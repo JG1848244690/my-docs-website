@@ -4,22 +4,19 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
-function Model() {
+function FrameBasedModel() {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!containerRef.current) return
 
-    // Clear any existing canvas in container
     while (containerRef.current.firstChild) {
       containerRef.current.removeChild(containerRef.current.firstChild)
     }
 
-    // Scene setup
     const scene = new THREE.Scene()
-    scene.background = null // Transparent background
+    scene.background = null
 
-    // Camera
     const camera = new THREE.PerspectiveCamera(
       75,
       containerRef.current.clientWidth / containerRef.current.clientHeight,
@@ -28,25 +25,21 @@ function Model() {
     )
     camera.position.set(0, 1, 3)
 
-    // Renderer
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: true, // Enable transparency
+      alpha: true,
     })
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight)
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.outputColorSpace = THREE.SRGBColorSpace
     containerRef.current.appendChild(renderer.domElement)
 
-    // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
     scene.add(ambientLight)
 
-    // Hemisphere light for better ambient
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5)
     scene.add(hemiLight)
 
-    // Main directional light (sun-like)
     const sunLight = new THREE.DirectionalLight(0xffffff, 1.5)
     sunLight.position.set(5, 10, 5)
     sunLight.castShadow = true
@@ -54,27 +47,21 @@ function Model() {
     sunLight.shadow.mapSize.height = 1024
     scene.add(sunLight)
 
-    // Fill light from opposite side
     const fillLight = new THREE.DirectionalLight(0xffffff, 0.6)
     fillLight.position.set(-5, 3, -5)
     scene.add(fillLight)
 
-    // Rim light from behind
     const rimLight = new THREE.DirectionalLight(0xffffee, 0.8)
     rimLight.position.set(0, 5, -10)
     scene.add(rimLight)
 
-    // Model reference
     let loadedModel: THREE.Object3D | null = null
 
-    // Loader
     const loader = new GLTFLoader()
     loader.load(
       '/models/f8ad5b640f0ffd506323ce0f73e12a42.glb',
       (gltf) => {
         const model = gltf.scene
-
-        // Center and scale model
         const box = new THREE.Box3().setFromObject(model)
         const center = box.getCenter(new THREE.Vector3())
         const size = box.getSize(new THREE.Vector3())
@@ -94,7 +81,6 @@ function Model() {
       }
     )
 
-    // Orbit controls (manual implementation)
     let isDragging = false
     let previousMousePosition = { x: 0, y: 0 }
     let manualRotationX = 0
@@ -124,31 +110,25 @@ function Model() {
     containerRef.current.addEventListener('mouseup', onMouseUp)
     containerRef.current.addEventListener('mouseleave', onMouseUp)
 
-    // Animation loop (time-based)
+    // Frame-based animation (每次旋转固定角度)
     let animationId: number
-    let lastTime = performance.now()
-    const autoRotationSpeed = 1.5 // radians per second
+    const autoRotationSpeed = 0.008 // 固定每帧旋转量
 
     const animate = () => {
       animationId = requestAnimationFrame(animate)
-
-      const currentTime = performance.now()
-      const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1) // cap at 100ms to prevent jumps
-      lastTime = currentTime
 
       if (loadedModel) {
         if (isDragging) {
           loadedModel.rotation.y = manualRotationY
           loadedModel.rotation.x = manualRotationX
         } else {
-          loadedModel.rotation.y += autoRotationSpeed * deltaTime
+          loadedModel.rotation.y += autoRotationSpeed
         }
       }
       renderer.render(scene, camera)
     }
     animate()
 
-    // Handle resize
     const handleResize = () => {
       if (!containerRef.current) return
       camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight
@@ -157,7 +137,6 @@ function Model() {
     }
     window.addEventListener('resize', handleResize)
 
-    // Cleanup
     return () => {
       cancelAnimationFrame(animationId)
       window.removeEventListener('resize', handleResize)
@@ -166,7 +145,6 @@ function Model() {
       containerRef.current?.removeEventListener('mouseup', onMouseUp)
       containerRef.current?.removeEventListener('mouseleave', onMouseUp)
 
-      // Dispose model resources
       if (loadedModel) {
         loadedModel.traverse((child) => {
           if (child instanceof THREE.Mesh) {
@@ -195,7 +173,6 @@ function Model() {
         mat.dispose()
       }
 
-      // Dispose scene resources
       while (scene.children.length > 0) {
         scene.remove(scene.children[0])
       }
@@ -221,7 +198,7 @@ function Model() {
   )
 }
 
-export default function ModelViewer() {
+export default function FrameBasedModelViewer() {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -247,5 +224,5 @@ export default function ModelViewer() {
     )
   }
 
-  return <Model />
+  return <FrameBasedModel />
 }

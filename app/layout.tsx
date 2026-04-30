@@ -8,14 +8,14 @@ export const metadata = {
   // For more information on metadata API, see: https://nextjs.org/docs/app/building-your-application/optimizing/metadata
 }
 
-const banner = <Banner storageKey="some-key">Nextra 4.0 is released 🎉</Banner>
+const banner = <Banner storageKey="some-key">路漫漫其修远兮，吾将上下而求索</Banner>
 const navbar = (
   <Navbar
-    logo={<b>Nextra</b>}
+    logo={<b>序言-xy</b>}
     // ... Your additional navbar options
   />
 )
-const footer = <Footer>MIT {new Date().getFullYear()} © Nextra.</Footer>
+const footer = <Footer></Footer>
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
