@@ -62,7 +62,12 @@
       "Bash(python3 -c ' *)",
       "Bash(python3 *)",
       "Bash(git commit --allow-empty -m ' *)",
-      "Bash(pnpm install *)"
+      "Bash(pnpm install *)",
+      "Bash(npm ls *)",
+      "Bash(npx gltf-transform *)",
+      "Bash(npx gltf-transform@latest --version)",
+      "Bash(pnpm dlx *)",
+      "Bash(pnpm gltf-transform *)"
     ]
   }
 }
