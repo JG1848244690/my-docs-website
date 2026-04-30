@@ -15,7 +15,19 @@ const navbar = (
     // ... Your additional navbar options
   />
 )
-const footer = <Footer></Footer>
+const footer = (
+  <Footer>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center', width: '100%' }}>
+      <span>个人学习与知识整理用途，仅供交流参考</span>
+      <span>
+        联系邮箱：<a href="mailto:1848244690@qq.com">1848244690@qq.com</a>
+      </span>
+      <a href="https://beian.miit.gov.cn" target="_blank" rel="noopener noreferrer">
+        晋ICP备2026005328号
+      </a>
+    </div>
+  </Footer>
+)
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
