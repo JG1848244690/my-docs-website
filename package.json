@@ -29,5 +29,11 @@
     "pagefind": "^1.5.2",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }

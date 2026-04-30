@@ -42,7 +42,27 @@
       "Bash(modprobe -n -v k10temp)",
       "Read(//etc/**)",
       "Bash(sensors-detect --auto)",
-      "Bash(sudo apt *)"
+      "Bash(sudo apt *)",
+      "Bash(gh run *)",
+      "mcp__github__get_file_contents",
+      "Bash(curl *)",
+      "mcp__github__list_commits",
+      "Bash(python3 -c \"import sys,json,base64; d=json.load\\(sys.stdin\\); print\\(base64.b64decode\\(d['content']\\).decode\\(\\)\\)\")",
+      "Bash(python -c \"import sys,json,base64; d=json.load\\(sys.stdin\\); print\\(base64.b64decode\\(d['content']\\).decode\\(\\)\\)\")",
+      "Bash(pnpm --version)",
+      "Bash(winget install *)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/GitHub CLI\")",
+      "Bash(gh --version)",
+      "PowerShell([Environment]::SetEnvironmentVariable\\(\"Path\", [Environment]::GetEnvironmentVariable\\(\"Path\", \"User\"\\) + \";C:\\\\Program Files\\\\GitHub CLI\", \"User\"\\))",
+      "Bash(ssh -V)",
+      "Bash(pacman -S --noconfirm sshpass)",
+      "Bash(apt-get install *)",
+      "Bash(sshpass *)",
+      "Bash(pip install *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 *)",
+      "Bash(git commit --allow-empty -m ' *)",
+      "Bash(pnpm install *)"
     ]
   }
 }
