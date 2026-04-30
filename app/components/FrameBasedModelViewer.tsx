@@ -112,7 +112,7 @@ function FrameBasedModel() {
 
     // Frame-based animation (每次旋转固定角度)
     let animationId: number
-    const autoRotationSpeed = 0.008 // 固定每帧旋转量
+    const autoRotationSpeed = Math.PI * 2 / 60 // 60Hz基准：一秒转一圈 (2π/60)
 
     const animate = () => {
       animationId = requestAnimationFrame(animate)

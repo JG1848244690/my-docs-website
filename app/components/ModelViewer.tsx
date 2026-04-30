@@ -127,7 +127,7 @@ function Model() {
     // Animation loop (time-based)
     let animationId: number
     let lastTime = performance.now()
-    const autoRotationSpeed = 1.5 // radians per second
+    const autoRotationSpeed = Math.PI * 2 // 一秒转一圈 (2π 弧度/秒)
 
     const animate = () => {
       animationId = requestAnimationFrame(animate)

@@ -10,21 +10,21 @@ import ModelViewer from '../app/components/ModelViewer.tsx'
 
 ## 实际对比
 
-左边是**帧基动画**（固定每帧 +0.008 弧度），右边是**时间基动画**（1.5 弧度/秒）。
+左边是**帧基动画**（固定每帧旋转 2π/60 弧度，以60Hz为基准一秒转一圈），右边是**时间基动画**（2π 弧度/秒，一秒转一圈）。
 
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
   <div>
     <h3 style={{ textAlign: 'center', color: '#ef4444' }}>帧基动画 (Frame-based)</h3>
     <FrameBasedModelViewer />
     <div style={{ textAlign: 'center', fontSize: '14px', color: '#888' }}>
-      60Hz: 1.3秒/圈 | 120Hz: 0.65秒/圈
+      60Hz: 1秒/圈 | 120Hz: 0.5秒/圈 | 240Hz: 0.25秒/圈
     </div>
   </div>
   <div>
     <h3 style={{ textAlign: 'center', color: '#22c55e' }}>时间基动画 (Time-based)</h3>
     <ModelViewer />
     <div style={{ textAlign: 'center', fontSize: '14px', color: '#888' }}>
-      任何刷新率: 约4.2秒/圈
+      任何刷新率: 恒定1秒/圈
     </div>
   </div>
 </div>
@@ -35,7 +35,7 @@ import ModelViewer from '../app/components/ModelViewer.tsx'
 
 ```javascript
 // 每帧旋转固定角度
-const autoRotationSpeed = 0.008 // 弧度/帧
+const autoRotationSpeed = Math.PI * 2 / 60 // 60Hz基准：一秒转一圈
 
 function animate() {
   requestAnimationFrame(animate)
@@ -46,14 +46,15 @@ function animate() {
 ```
 
 **问题**：
-- 60Hz 屏幕：每秒旋转约 0.48 弧度
-- 120Hz 屏幕：每秒旋转约 0.96 弧度（**速度翻倍**）
+- 60Hz 屏幕：每秒旋转约 2π 弧度（1圈）
+- 120Hz 屏幕：每秒旋转约 4π 弧度（**2圈，速度翻倍**）
+- 240Hz 屏幕：每秒旋转约 8π 弧度（**4圈，速度翻4倍**）
 
 ### 时间基动画
 
 ```javascript
 // 根据实际时间间隔计算旋转量
-const autoRotationSpeed = 1.5 // 弧度/秒
+const autoRotationSpeed = Math.PI * 2 // 2π 弧度/秒（一秒转一圈）
 let lastTime = performance.now()
 
 function animate() {
@@ -76,7 +77,7 @@ function animate() {
 
 ```javascript
 let animationId: number
-const autoRotationSpeed = 0.008 // 固定每帧旋转量
+const autoRotationSpeed = Math.PI * 2 / 60 // 60Hz基准：一秒转一圈
 
 const animate = () => {
   animationId = requestAnimationFrame(animate)
@@ -94,7 +95,7 @@ animate()
 ```javascript
 let animationId: number
 let lastTime = performance.now()
-const autoRotationSpeed = 1.5 // 弧度/秒
+const autoRotationSpeed = Math.PI * 2 // 2π 弧度/秒（一秒转一圈）
 
 const animate = () => {
   animationId = requestAnimationFrame(animate)
@@ -141,16 +142,16 @@ const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1)
 ## 总结
 
 ```javascript
-// ❌ 帧基 - 速度依赖刷新率
-rotation += 0.008
+// ❌ 帧基 - 速度依赖刷新率（60Hz下1秒/圈，240Hz下0.25秒/圈）
+rotation += Math.PI * 2 / 60
 
-// ✅ 时间基 - 速度恒定
+// ✅ 时间基 - 速度恒定（任何刷新率都是1秒/圈）
 const deltaTime = (currentTime - lastTime) / 1000
-rotation += speed * deltaTime
+rotation += Math.PI * 2 * deltaTime
 
 // ⚠️ 时间基 + 封顶 - 防止标签页切换后跳跃
 const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1)
-rotation += speed * deltaTime
+rotation += Math.PI * 2 * deltaTime
 ```
 
 **结论**：除非明确知道动画不需要恒定速度，否则都应该使用时间基动画。
