@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 
 function FrameBasedModel() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -58,10 +57,7 @@ function FrameBasedModel() {
 
     let loadedModel: THREE.Object3D | null = null
 
-    const dracoLoader = new DRACOLoader()
-    dracoLoader.setDecoderPath('/draco/')
     const loader = new GLTFLoader()
-    loader.setDRACOLoader(dracoLoader)
     loader.load(
       '/models/f8ad5b640f0ffd506323ce0f73e12a42.glb',
       (gltf) => {
