@@ -12,7 +12,7 @@ import ModelViewer from '../app/components/ModelViewer.tsx'
 
 左边是**帧基动画**（固定每帧旋转 2π/60 弧度，以60Hz为基准一秒转一圈），右边是**时间基动画**（2π 弧度/秒，一秒转一圈）。
 
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '24px' }}>
   <div>
     <h3 style={{ textAlign: 'center', color: '#ef4444' }}>帧基动画 (Frame-based)</h3>
     <FrameBasedModelViewer />
