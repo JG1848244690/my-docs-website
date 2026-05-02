@@ -3,4 +3,5 @@ export default {
   'Web Worker 使用教程': 'Web Worker',
   electron: 'Electron 跨端框架',
   大屏适配方案: '大屏适配方案',
+  'CDN-Nginx缓存排查记录': 'CDN/Nginx 缓存排查',
 }

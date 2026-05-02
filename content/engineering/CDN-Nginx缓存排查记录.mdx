@@ -1,0 +1,93 @@
+这个问题很烦人。我服务器上有俩项目，一个 SPA 静态站，一个 Next.js 文档站，共用一个 Nginx，域名都走了 Cloudflare CDN。
+
+某天我改了 Next.js 文档站的代码，push 到 main 分支，CD 流水线跑通了，去浏览器一看——页面没变。
+
+一开始以为是 CD 配置写错了，SSH 到服务器上一看，git log 确认代码确实是最新的。又怀疑 PM2 启动的项目路径不对，因为之前这个项目在服务器上有两个目录，怕指错了。用 pm2 describe 看了一下，路径没问题，进程也是刚重启的。
+
+这时候我第一反应是，会不会是 Nginx 缓存？因为以前做项目遇到过这种类似的 Nginx 配置的问题，但之前问过 AI，AI 说 Nginx 反向代理一般不会缓存，不用管。
+
+既然不是 Nginx，那就排查客户端缓存吧。清浏览器缓存、强制刷新、无痕窗口，全都试了，还是旧页面。
+
+那就是服务端的问题了。我的域名走了 Cloudflare，去 CF 后台 Purge Everything 清了缓存，等了一会再访问——还是旧的。这时候有点郁闷了，代码是新的，PM2 重启了，浏览器缓存清了，CF 缓存也清了，怎么还是旧页面？
+
+冷静下来想了一下，问题肯定在请求链路的某一层。请求流程是这样的：
+
+```
+用户浏览器 -> Cloudflare CDN -> Nginx 反向代理 -> PM2 Next.js
+```
+
+那就一层一层 curl 过去，看哪一层返回的是旧的。
+
+**第一层，直接 curl Next.js，绕过 Nginx 和 CF：**
+
+```bash
+curl -L http://localhost:3002/content | head -50
+```
+
+返回的是新内容。好，Next.js 没问题。
+
+**第二层，curl 经过 Nginx，绕过 CF：**
+
+```bash
+curl -H "Host: xxx.com.cn" http://服务器IP/content | head -50
+```
+
+返回的是旧内容。破案了，问题在 Nginx。
+
+**第三层，curl 经过 CF 全链路：**
+
+```bash
+curl -I https://域名/content
+```
+
+响应头里写着 `x-nextjs-cache: HIT` 和 `cache-control: s-maxage=31536000`。s-maxage=31536000？缓存一年。
+
+---
+
+先解决 Nginx 的问题。去看 Nginx 配置：
+
+```bash
+cat /www/server/nginx/conf/proxy.conf
+```
+
+里面写着：
+
+```nginx
+proxy_cache_path /www/server/nginx/proxy_cache_dir levels=1:2 keys_zone=cache_one:20m inactive=1d max_size=5g;
+proxy_cache cache_one;
+```
+
+全局代理缓存，inactive=1d，所有 proxy_pass 的请求都被缓存一天。这个 proxy.conf 在 nginx.conf 里被 include 进来了，对所有反向代理站点生效。
+
+再看站点自己的配置，也单独配了一个缓存区：
+
+```nginx
+proxy_cache_path /www/wwwroot/站点目录/proxy_cache_dir levels=1:2 keys_zone=站点缓存区:20m inactive=1d max_size=5g;
+```
+
+两层缓存叠在一起，Nginx 缓存一天，CF 那边因为 Next.js 的 s-maxage 头缓存一年。CD 流程只做了 git pull、build、pm2 restart，根本没清缓存，所以页面永远是旧的。
+
+那为什么我的 SPA 项目不出这个问题呢？因为 SPA 项目是 dist 静态文件，Nginx 直接用 root 指令读本地文件返回，不经过 proxy_pass。proxy_cache 只对 proxy_pass 生效，所以静态站完全不受影响。
+
+找到原因就好办了。在站点 Nginx 配置的 location 块里，proxy_pass 下面加了一行：
+
+```nginx
+proxy_cache off;
+```
+
+然后清掉已有的缓存：
+
+```bash
+rm -rf /www/server/nginx/proxy_cache_dir/*
+nginx -s reload
+```
+
+再 curl 源站，新内容出来了。浏览器访问，新内容也出来了。
+
+至于 CF 那边，长期方案是在 CD 流程里加一步自动清缓存：部署完之后调 Cloudflare API 的 purge_cache 接口。同时在 CF 后台设一个 Cache Rule，把这个站点的 Edge TTL 缩短到几个小时，作为兜底。
+
+---
+
+回头看这次排查，其实从"SPA 能更新但 Next.js 不能"这个现象就能直接锁定方向：两个站点的区别就是一个走 root 读静态文件，一个走 proxy_pass 反向代理。proxy_cache 只影响后者。如果一开始就去查 Nginx 配置，十分钟就能解决。被 AI 一句"不是 Nginx 的问题"带偏了，浪费了小半天。
+
+经验就是：反向代理的项目一定要注意 Nginx 的 proxy_cache 配置，宝塔面板默认可能开全局代理缓存。排查缓存问题时，从后端往前端一层一层 curl，很快就能定位到是哪一层在缓存。
